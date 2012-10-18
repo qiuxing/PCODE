@@ -1,3 +1,5 @@
+## 10/18/2012. Make a package instead of a flat R file.
+
 ## 9/13/2012.  The sign of y.fit is still random.
 
 ## useful functions for high-dim ODE project
