@@ -1,0 +1,11 @@
+Package: foo
+Title: A title
+Version: 0.0.1
+Author: Xing Qiu
+Description: An introduction, could be 20 lines long.
+Maintainer: Xing Qiu <xqiu@bst.rochester.edu>
+Depends: R (>= 2.9.0), Hmisc, xtable
+Imports: Hmisc, xtable
+Enhances:
+License: LGPL
+LazyLoad: yes
