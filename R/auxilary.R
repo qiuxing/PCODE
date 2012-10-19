@@ -6,6 +6,14 @@ projected.fnorm <- function(V, W){
   return(norm(diffmat, "F")/sqrt(2))
 }
 
+## the procrustes mean on Graff(K,m) for pca/spca
+graff.mean.pca <- function(pcalist){
+  
+}
+
+
+
+
 grassmann.mean <- function(Ws){
   ## A simple way of computing centroid of points on Gr(m,n)
   N <- length(Ws)                       #sample size
