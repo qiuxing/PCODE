@@ -1,11 +1,10 @@
-Package: foo
-Title: A title
+Package: PCODE
+Title: Parameter estimation for high dimensional ordinary differential equations by principal component analyses.
 Version: 0.0.1
 Author: Xing Qiu
-Description: An introduction, could be 20 lines long.
+Description: Parameter estimation for high dimensional ordinary differential equations by principal component analyses.  It first uses .... fast .... and stable ...
 Maintainer: Xing Qiu <xqiu@bst.rochester.edu>
-Depends: R (>= 2.9.0), Hmisc, xtable
-Imports: Hmisc, xtable
+Depends: R (>= 2.9.0), fda, deSolve, FME, elasticnet
 Enhances:
 License: LGPL
 LazyLoad: yes
