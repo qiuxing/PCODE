@@ -69,7 +69,7 @@ lowdim.est <- function(Ts, xhats, xhats.curves, method=c("FME", "pda"), const=TR
 }
 
 ## The main function
-PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lowdim.method=c("FME","pdf"), center=TRUE, spca.para=2^seq(K)/2, const=TRUE){
+PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lowdim.method=c("FME","pdf"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
   pca.method <- match.arg(pca.method)
   lowdim.method <- match.arg(lowdim.method)
   pca.results <- pcafun(y, Ts, K=K, lambda=lambda, method=pca.method,
