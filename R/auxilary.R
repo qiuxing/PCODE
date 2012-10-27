@@ -70,7 +70,7 @@ graff.mean <- function(pcalist){
 ## apply it to another set of data
 reprojection <- function(Y2, PCA1){
   params <- PCA1[["parameters"]]; method <- params[["method"]]
-  Ts <- PCA1[["Ts"]]; K <- params[["K"]]
+  Ts <- params[["Ts"]]; K <- params[["K"]]
   pcnames <- paste("PC",1:K,sep="")
   if (method=="fpca"){
     Xt <- PCA1[["xhats.curves"]];  bs1 <- Xt[["basis"]]
