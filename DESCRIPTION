@@ -1,6 +1,6 @@
 Package: PCODE
 Title: Parameter estimation for high dimensional ordinary differential equations by principal component analyses.
-Version: 0.0.1
+Version: 0.0.2
 Author: Xing Qiu
 Description: Parameter estimation for high dimensional ordinary differential equations by principal component analyses.  It first uses .... fast .... and stable ...
 Maintainer: Xing Qiu <xqiu@bst.rochester.edu>
