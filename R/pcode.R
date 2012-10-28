@@ -27,8 +27,11 @@ Xfun <- function(pars, Ts, xinit, const=TRUE){
 ## and xhats.init estimated from pcafun(); C.init estimated from
 ## C.init.est(). const=T/F: whether the equation system is homogeneous
 ## or inhomogeneous.
-lowdim.est <- function(Ts, xhats, xhats.curves, method=c("FME", "pda"), const=TRUE){
+lowdim.est <- function(Ts, xhats, xhats.curves, method=c("FME", "pda"), lambda=0.01, const=TRUE){
   K <- ncol(xhats)
+  mybasis <- xhats.curves[["basis"]]
+  mypar <- fdPar(mybasis, 2, lambda=lambda)
+
   Xcost <- function(pars, xinit){
     out <- Xfun(pars, Ts, xinit=xinit, const=const)
     cost <- modCost(model=out, obs=cbind(time=Ts, xhats))
@@ -51,7 +54,7 @@ lowdim.est <- function(Ts, xhats, xhats.curves, method=c("FME", "pda"), const=TR
     CC <- matrix(coef(myfit), ncol=K+1)
     Ahat <- CC[,-1]; bvec <- CC[,1]
     ## don't need the "time" column anymore
-    xhats.fit <- Xfun(pars=coef(myfit), Ts, xinit=z[1,-1], const=const)[,-1]
+    xhats.fit <- as.matrix(Xfun(pars=coef(myfit), Ts, xinit=z[1,-1], const=const)[,-1])
   } else {                              #homogeneous
     z <- eval.fd(xhats.curves,Ts)
     z.deriv <- eval.fd(deriv(xhats.curves), Ts)
@@ -59,43 +62,37 @@ lowdim.est <- function(Ts, xhats, xhats.curves, method=c("FME", "pda"), const=TR
     pars0 <- as.vector(CC0)
     myfit <- modFit(f=Xcost, p=pars0, xinit=z[1,])
     Ahat <- matrix(coef(myfit), ncol=K); bvec <- rep(0,K)
-    xhats.fit <- Xfun(pars=coef(myfit), Ts, xinit=z[1,], const=const)[,-1]
+    xhats.fit <- as.matrix(Xfun(pars=coef(myfit), Ts, xinit=z[1,], const=const)[,-1])
   }
   pcnames <- paste("PC",1:K,sep="")
   dimnames(Ahat) <- list(pcnames, pcnames)
   names(bvec) <- pcnames
   rownames(xhats.fit) <- Ts
-  return(list(Ahat=Ahat, bvec=bvec, deviance=deviance(myfit), iterations=myfit[["iterations"]],xhats.fit=xhats.fit, Times=Ts))
+  ## a spline representation of xhats
+  xhats.fit.curves <- smooth.basis(Ts, xhats.fit, mypar)[["fd"]]
+
+  return(list(Ahat=Ahat, bvec=bvec, deviance=deviance(myfit), iterations=myfit[["iterations"]],xhats.fit=xhats.fit, xhats.fit.curves=xhats.fit.curves,Times=Ts))
 }
 
 ## The main function
-PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lowdim.method=c("FME","pdf"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
-  pca.method <- match.arg(pca.method)
-  lowdim.method <- match.arg(lowdim.method)
+PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lowdim.method=c("FME","pda"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
+  pca.method <- match.arg(pca.method); lowdim.method <- match.arg(lowdim.method)
   pca.results <- pcafun(y, Ts, K=K, lambda=lambda, method=pca.method,
                         center=center, spca.para=spca.para)
-  intrinsic.system <- lowdim.est(Ts, xhats=pca.results[["xhats"]], xhats.curves=pca.results[["xhats.curves"]], method=lowdim.method, const=const)
+  intrinsic.system <- lowdim.est(Ts, xhats=pca.results[["xhats"]], xhats.curves=pca.results[["xhats.curves"]], method=lowdim.method, lambda=lambda, const=const)
   xhats.fit <- intrinsic.system[["xhats.fit"]]
+  xhats.fit.curves <- intrinsic.system[["xhats.fit.curves"]]
+  mybasis <- xhats.fit.curves[["basis"]]
 
-  y.fit0 <- as.matrix(xhats.fit) %*% t(pca.results[["Bhat"]])
+  muvec <- matrix(rep(pca.results[["centers"]], ncol(y)), nrow=nrow(y))
+  y.fit <- xhats.fit %*% t(pca.results[["Bhat"]]) + muvec
+  mucoef <- matrix(rep(coef(pca.results[["meancur"]]), ncol(y)), ncol=ncol(y))
+  y.fit.curves <- fd(coef(xhats.fit.curves) %*% t(pca.results[["Bhat"]]) + mucoef, mybasis)
 
-  ## "centering" refers to different meanings in fPCA and other PCA
-  ## methods.
-  if (center) {
-    if (pca.method=="fpca"){
-      ## row centers
-      rcenters <- pca.results[["centers"]]
-      y.fit <- y.fit0 + matrix(rep(rcenters,ncol(y)), nrow=nrow(y))
-    } else {
-      ## column centers
-      ccenters <- pca.results[["centers"]]
-      y.fit <- y.fit0 + matrix(rep(ccenters,nrow(y)), nrow=nrow(y), byrow=T)
-    }
-  } else {                              #centers are assumed to be zeros
-    y.fit <- y.fit0
-  }
-
-  return (list(Times=Ts, xhats.fit=xhats.fit, y.fit=y.fit, residuals=y-y.fit,
+  return (list(Times=Ts, xhats.fit=xhats.fit,
+               xhats.fit.curves=xhats.fit.curves,
+               y.fit=y.fit, y.fit.curves=y.fit.curves,
+               residuals=y-y.fit,
                Ahat=intrinsic.system[["Ahat"]],
                bvec=intrinsic.system[["bvec"]],
                Bhat=pca.results[["Bhat"]], Binv=pca.results[["Binv"]],

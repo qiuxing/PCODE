@@ -51,7 +51,7 @@ pcafun <- function(y,Ts,K, lambda=0.01, method=c("fpca", "pca", "spca"),
   ## Binv <- diag(1/sdev) %*% t(rotation)
   Binv <- solve(t(Bhat) %*% Bhat) %*% t(Bhat)
 
-  return(list(centers=centers, meancur=meancur, Bhat=Bhat, Binv=Binv, Ts=Ts, xhats=xhats, xhats.curves=xhats.curves, parameters=list(K=K, lambda=lambda, method=method,center=center, spca.para=spca.para)))
+  return(list(centers=centers, meancur=meancur, Bhat=Bhat, Binv=Binv, xhats=xhats, xhats.curves=xhats.curves, parameters=list(Ts=Ts, K=K, lambda=lambda, method=method,center=center, spca.para=spca.para)))
 }
 
 ## group.pcafun estimates a centroid for a group of data (xhats).
