@@ -100,6 +100,32 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
                intrinsic.system=intrinsic.system))
 }
 
+## pcode for a group of subjects
+PCODE.group <- function(Ylist, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lowdim.method=c("FME","pda"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
+  pca.method <- match.arg(pca.method); lowdim.method <- match.arg(lowdim.method)
+  pca.results <- group.pcafun(Ylist, Ts=Ts, K=K, method=pca.method, center=center, spca.para=spca.para)
+
+  intrinsic.system <- lowdim.est(Ts, xhats=pca.results[["xhats"]], xhats.curves=pca.results[["xhats.curves"]], method=lowdim.method, lambda=lambda, const=const)
+  xhats.fit <- intrinsic.system[["xhats.fit"]]
+  xhats.fit.curves <- intrinsic.system[["xhats.fit.curves"]]
+  mybasis <- xhats.fit.curves[["basis"]]
+
+  muvec <- matrix(rep(pca.results[["centers"]], ncol(y)), nrow=nrow(y))
+  y.fit <- xhats.fit %*% t(pca.results[["Bhat"]]) + muvec
+  mucoef <- matrix(rep(coef(pca.results[["meancur"]]), ncol(y)), ncol=ncol(y))
+  y.fit.curves <- fd(coef(xhats.fit.curves) %*% t(pca.results[["Bhat"]]) + mucoef, mybasis)
+
+  return (list(Times=Ts, xhats.fit=xhats.fit,
+               xhats.fit.curves=xhats.fit.curves,
+               y.fit=y.fit, y.fit.curves=y.fit.curves,
+               residuals=y-y.fit,
+               Ahat=intrinsic.system[["Ahat"]],
+               bvec=intrinsic.system[["bvec"]],
+               Bhat=pca.results[["Bhat"]], Binv=pca.results[["Binv"]],
+               pca.results=pca.results,
+               intrinsic.system=intrinsic.system))
+}
+
 ## between-subject fitting.  Note that y0.new must be a column vector.
 predict.pcode1 <- function(pcode.fit, y0.new, Ts.new="same"){
   ## This function only works with un-centered version as of 09/08/2012.
@@ -113,8 +139,6 @@ predict.pcode1 <- function(pcode.fit, y0.new, Ts.new="same"){
   return (y.fit)
 }
 
-## between subjects fitting, group version.
-## predict.pcdode <- ...
 
 
 ## ## wrapper for plotting
