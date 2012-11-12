@@ -112,11 +112,11 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
                intrinsic.system=intrinsic.system))
 }
 
-## between-subject fitting.  Note that y0.new must be a column vector.
+## between-subject fitting.  Note that y0.new must be a column vector.  As of ver 0.02, this prediction function does not work well with const != 0 case.
 predict.pcode1 <- function(pcode.fit, y0.new, Ts.new="same"){
   ## This function only works with un-centered version as of 09/08/2012.
   Ts <- pcode.fit[["Times"]];
-  if (Ts.new=="same"){
+  if (is.character(Ts.new) && Ts.new=="same"){
     Ts.new <- Ts
   }
   xhat0 <- as.vector(pcode.fit[["Binv"]] %*% y0.new)
@@ -125,8 +125,8 @@ predict.pcode1 <- function(pcode.fit, y0.new, Ts.new="same"){
   return (y.fit)
 }
 
-## wrapper for between subject cross-validation
-CV.group <- function(Ylist, Ts, K, ...){
+## wrapper for between subject cross-validation. As of ver 0.02, this function does not work with const=TRUE case.
+CV.group <- function(Ylist, Ts, K, const=FALSE, ...){
   N <- length(Ylist)                    #number of subjects
   y.fit.list <- list(); rss <- rep(0,N)
   for (n in 1:N){

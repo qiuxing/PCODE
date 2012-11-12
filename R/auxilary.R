@@ -1,7 +1,7 @@
 ## useful functions for high-dim ODE project
 projected.fnorm <- function(V, W){
   ## projection Frobenius norm.
-  if (is.fd(V) & is.fd(W)){             #fPCA objects or curves
+  if (is.fd(V) && is.fd(W)){             #fPCA objects or curves
     mybasis <- V[["basis"]]
     Beta <- fd(diag(mybasis[["nbasis"]]), mybasis)
     SigmaBeta <- inprod(Beta, Beta); ee <- eigen(SigmaBeta)
@@ -10,10 +10,9 @@ projected.fnorm <- function(V, W){
     ## Qv, Qw are the representation of V, W under an orthonormal basis
     Qv <- qr.Q(qr(Lambda.root %*% t(Tbeta) %*% coef(V)))
     Qw <- qr.Q(qr(Lambda.root %*% t(Tbeta) %*% coef(W)))
-    
-  } else if (is.matrix(V) & is.matrix(W)){ #pca objects
+  } else if (is.matrix(V) && is.matrix(W)){ #pca objects
     Qv <- qr.Q(qr(V)); Qw <- qr.Q(qr(W))
-  }
+  } else 
   diffmat <- Qv %*% t(Qv) - Qw %*% t(Qw)
   return(norm(diffmat, "F")/sqrt(2))
 }
