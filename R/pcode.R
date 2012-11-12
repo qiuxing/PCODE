@@ -139,6 +139,18 @@ predict.pcode1 <- function(pcode.fit, y0.new, Ts.new="same"){
   return (y.fit)
 }
 
+## wrapper for between subject cross-validation
+CV.group <- function(Ylist, Ts, K, ...){
+  N <- length(Ylist)                    #number of subjects
+  y.fit.list <- list(); RSS <- rep(0,N)
+  for (n in 1:N){
+    Ylist.n <- Ylist[[-n]]; Yn <- Ylist[[n]]
+    meansys <- PCODE.group(Ylist.n, Ts=Ts, K=K, ...)
+    y.fit.list[[n]] <- predict.pcode1(meansys, Yn[,0])
+    RSS[n] <- sum((Yn-Yn.fit)^2)
+  }
+  return(list(y.fit.list=y.fit.list, RSS=RSS))
+}
 
 
 ## ## wrapper for plotting
