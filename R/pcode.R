@@ -133,7 +133,7 @@ CV.group <- function(Ylist, Ts, K, const=FALSE, ...){
     Ylist.n <- Ylist[-n]; Yn <- Ylist[[n]]
     meansys <- PCODE(Ylist.n, Ts=Ts, K=K, ...)
     y.fit.list[[n]] <- predict.pcode1(meansys, Yn[1,])
-    rss[n] <- sum((Yn-Yn.fit)^2)
+    rss[n] <- sum((Yn-y.fit.list[[n]])^2)
   }
   return(list(y.fit.list=y.fit.list, rss=rss))
 }
