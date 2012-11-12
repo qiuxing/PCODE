@@ -77,48 +77,34 @@ lowdim.est <- function(Ts, xhats, xhats.curves, method=c("FME", "pda"), lambda=0
 ## The main function
 PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lowdim.method=c("FME","pda"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
   pca.method <- match.arg(pca.method); lowdim.method <- match.arg(lowdim.method)
-  pca.results <- pcafun(y, Ts, K=K, lambda=lambda, method=pca.method,
-                        center=center, spca.para=spca.para)
-  intrinsic.system <- lowdim.est(Ts, xhats=pca.results[["xhats"]], xhats.curves=pca.results[["xhats.curves"]], method=lowdim.method, lambda=lambda, const=const)
-  xhats.fit <- intrinsic.system[["xhats.fit"]]
-  xhats.fit.curves <- intrinsic.system[["xhats.fit.curves"]]
-  mybasis <- xhats.fit.curves[["basis"]]
-
-  muvec <- matrix(rep(pca.results[["centers"]], ncol(y)), nrow=nrow(y))
-  y.fit <- xhats.fit %*% t(pca.results[["Bhat"]]) + muvec
-  mucoef <- matrix(rep(coef(pca.results[["meancur"]]), ncol(y)), ncol=ncol(y))
-  y.fit.curves <- fd(coef(xhats.fit.curves) %*% t(pca.results[["Bhat"]]) + mucoef, mybasis)
-
-  return (list(Times=Ts, xhats.fit=xhats.fit,
-               xhats.fit.curves=xhats.fit.curves,
-               y.fit=y.fit, y.fit.curves=y.fit.curves,
-               residuals=y-y.fit,
-               Ahat=intrinsic.system[["Ahat"]],
-               bvec=intrinsic.system[["bvec"]],
-               Bhat=pca.results[["Bhat"]], Binv=pca.results[["Binv"]],
-               pca.results=pca.results,
-               intrinsic.system=intrinsic.system))
-}
-
-## pcode for a group of subjects
-PCODE.group <- function(Ylist, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lowdim.method=c("FME","pda"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
-  pca.method <- match.arg(pca.method); lowdim.method <- match.arg(lowdim.method)
-  pca.results <- group.pcafun(Ylist, Ts=Ts, K=K, method=pca.method, center=center, spca.para=spca.para)
+  ## test if y is a list of subjects or just one subject
+  if (is.list(y)) {                     #many subjects
+    ngenes <- ncol(y[[1]])
+    pca.results <- group.pcafun(y, Ts=Ts, K=K, method=pca.method, center=center, spca.para=spca.para)
+  } else {                              #just one subject
+    ngenes <- ncol(y)
+    pca.results <- pcafun(y, Ts, K=K, lambda=lambda, method=pca.method, center=center, spca.para=spca.para)
+  }
 
   intrinsic.system <- lowdim.est(Ts, xhats=pca.results[["xhats"]], xhats.curves=pca.results[["xhats.curves"]], method=lowdim.method, lambda=lambda, const=const)
   xhats.fit <- intrinsic.system[["xhats.fit"]]
   xhats.fit.curves <- intrinsic.system[["xhats.fit.curves"]]
   mybasis <- xhats.fit.curves[["basis"]]
 
-  muvec <- matrix(rep(pca.results[["centers"]], ncol(y)), nrow=nrow(y))
+  muvec <- matrix(rep(pca.results[["centers"]], ngenes), nrow=length(Ts))
   y.fit <- xhats.fit %*% t(pca.results[["Bhat"]]) + muvec
-  mucoef <- matrix(rep(coef(pca.results[["meancur"]]), ncol(y)), ncol=ncol(y))
+  mucoef <- matrix(rep(coef(pca.results[["meancur"]]), ngenes), ncol=ngenes)
   y.fit.curves <- fd(coef(xhats.fit.curves) %*% t(pca.results[["Bhat"]]) + mucoef, mybasis)
 
+  if (is.list(y)) {                     #many subjects
+    rss <- mean(sapply(y, function(yn) sum((yn-y.fit)^2)))
+  } else {                              #just one subject
+    rss <- sum((y-y.fit)^2)
+  }
   return (list(Times=Ts, xhats.fit=xhats.fit,
                xhats.fit.curves=xhats.fit.curves,
                y.fit=y.fit, y.fit.curves=y.fit.curves,
-               residuals=y-y.fit,
+               rss=rss,
                Ahat=intrinsic.system[["Ahat"]],
                bvec=intrinsic.system[["bvec"]],
                Bhat=pca.results[["Bhat"]], Binv=pca.results[["Binv"]],
@@ -142,14 +128,14 @@ predict.pcode1 <- function(pcode.fit, y0.new, Ts.new="same"){
 ## wrapper for between subject cross-validation
 CV.group <- function(Ylist, Ts, K, ...){
   N <- length(Ylist)                    #number of subjects
-  y.fit.list <- list(); RSS <- rep(0,N)
+  y.fit.list <- list(); rss <- rep(0,N)
   for (n in 1:N){
-    Ylist.n <- Ylist[[-n]]; Yn <- Ylist[[n]]
+    Ylist.n <- Ylist[-n]; Yn <- Ylist[[n]]
     meansys <- PCODE.group(Ylist.n, Ts=Ts, K=K, ...)
-    y.fit.list[[n]] <- predict.pcode1(meansys, Yn[,0])
-    RSS[n] <- sum((Yn-Yn.fit)^2)
+    y.fit.list[[n]] <- predict.pcode1(meansys, Yn[0,])
+    rss[n] <- sum((Yn-Yn.fit)^2)
   }
-  return(list(y.fit.list=y.fit.list, RSS=RSS))
+  return(list(y.fit.list=y.fit.list, rss=rss))
 }
 
 
@@ -157,5 +143,3 @@ CV.group <- function(Ylist, Ts, K, ...){
 ## plot.pcode <- function(pcode.result){
 
 ## }
-
-
