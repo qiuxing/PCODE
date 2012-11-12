@@ -131,8 +131,8 @@ CV.group <- function(Ylist, Ts, K, ...){
   y.fit.list <- list(); rss <- rep(0,N)
   for (n in 1:N){
     Ylist.n <- Ylist[-n]; Yn <- Ylist[[n]]
-    meansys <- PCODE.group(Ylist.n, Ts=Ts, K=K, ...)
-    y.fit.list[[n]] <- predict.pcode1(meansys, Yn[0,])
+    meansys <- PCODE(Ylist.n, Ts=Ts, K=K, ...)
+    y.fit.list[[n]] <- predict.pcode1(meansys, Yn[1,])
     rss[n] <- sum((Yn-Yn.fit)^2)
   }
   return(list(y.fit.list=y.fit.list, rss=rss))
