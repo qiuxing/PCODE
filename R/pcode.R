@@ -127,14 +127,12 @@ predict.pcode1 <- function(pcode.fit, y0.new, Ts.new="same"){
 
 ## wrapper for between subject cross-validation. As of ver 0.02, this function does not work with const=TRUE case.
 CV.group <- function(Ylist, Ts, K, const=FALSE, ...){
-  N <- length(Ylist)                    #number of subjects
-  y.fit.list <- list(); rss <- rep(0,N)
-  for (n in 1:N){
+  y.fit.list <- foreach(n=1:length(Ylist)) %dopar%{
     Ylist.n <- Ylist[-n]; Yn <- Ylist[[n]]
-    meansys <- PCODE(Ylist.n, Ts=Ts, K=K, ...)
-    y.fit.list[[n]] <- predict.pcode1(meansys, Yn[1,])
-    rss[n] <- sum((Yn-y.fit.list[[n]])^2)
+    meansys <- PCODE(Ylist.n, Ts=Ts, K=K, const=const, ...)
+    predict.pcode1(meansys, Yn[1,])
   }
+  rss <- sapply(1:length(Ylist), function(n) sum((Ylist[[n]]-y.fit.list[[n]])^2))
   return(list(y.fit.list=y.fit.list, rss=rss))
 }
 
