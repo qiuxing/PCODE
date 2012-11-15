@@ -79,10 +79,10 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
   pca.method <- match.arg(pca.method); lowdim.method <- match.arg(lowdim.method)
   ## test if y is a list of subjects or just one subject
   if (is.list(y)) {                     #many subjects
-    ngenes <- ncol(y[[1]])
+    m <- ncol(y[[1]])
     pca.results <- group.pcafun(y, Ts=Ts, K=K, method=pca.method, center=center, spca.para=spca.para)
   } else {                              #just one subject
-    ngenes <- ncol(y)
+    m <- ncol(y)
     pca.results <- pcafun(y, Ts, K=K, lambda=lambda, method=pca.method, center=center, spca.para=spca.para)
   }
 
@@ -91,15 +91,15 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
   xhats.fit.curves <- intrinsic.system[["xhats.fit.curves"]]
   mybasis <- xhats.fit.curves[["basis"]]
 
-  muvec <- matrix(rep(pca.results[["centers"]], ngenes), nrow=length(Ts))
+  muvec <- matrix(rep(pca.results[["centers"]], m), nrow=length(Ts))
   y.fit <- xhats.fit %*% t(pca.results[["Bhat"]]) + muvec
-  mucoef <- matrix(rep(coef(pca.results[["meancur"]]), ngenes), ncol=ngenes)
+  mucoef <- matrix(rep(coef(pca.results[["meancur"]]), m), ncol=m)
   y.fit.curves <- fd(coef(xhats.fit.curves) %*% t(pca.results[["Bhat"]]) + mucoef, mybasis)
 
   if (is.list(y)) {                     #many subjects
-    rss <- mean(sapply(y, function(yn) sum((yn-y.fit)^2)))
+    rss <- mean(sapply(y, function(yn) sum((yn-y.fit)^2)))/m
   } else {                              #just one subject
-    rss <- sum((y-y.fit)^2)
+    rss <- sum((y-y.fit)^2/m)
   }
   return (list(Times=Ts, xhats.fit=xhats.fit,
                xhats.fit.curves=xhats.fit.curves,
@@ -127,12 +127,13 @@ predict.pcode1 <- function(pcode.fit, y0.new, Ts.new="same"){
 
 ## wrapper for between subject cross-validation. As of ver 0.02, this function does not work with const=TRUE case.
 CV.group <- function(Ylist, Ts, K, const=FALSE, ...){
+  m <- ncol(Ylist[[1]])
   y.fit.list <- foreach(n=1:length(Ylist)) %dopar%{
     Ylist.n <- Ylist[-n]; Yn <- Ylist[[n]]
     meansys <- PCODE(Ylist.n, Ts=Ts, K=K, const=const, ...)
     predict.pcode1(meansys, Yn[1,])
   }
-  rss <- sapply(1:length(Ylist), function(n) sum((Ylist[[n]]-y.fit.list[[n]])^2))
+  rss <- sapply(1:length(Ylist), function(n) sum((Ylist[[n]]-y.fit.list[[n]])^2))/m
   return(list(y.fit.list=y.fit.list, rss=rss))
 }
 

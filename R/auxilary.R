@@ -103,6 +103,29 @@ reprojection <- function(Y2, PCA1){
   return(Bhat)
 }
 
+
+## This function takes B and A, produces a sparse representation of C=BAB-
+sparseC <- function(A, B, prior=NULL){
+  m <- nrow(B); K <- ncol(B)
+  ## dirty trick: find the best combination within 2*K candidate genes
+  if (is.null(prior)) {
+    np <- min(2*K,m); prior <- 1:(np)
+  }
+  B0 <- scale(B[prior,], center=FALSE)
+  Sigma0 <- B0 %*% t(B0)
+  combmat <- combn(np,K)
+  dets <- sapply(1:ncol(combmat), function(k) det(Sigma0[combmat[,k],combmat[,k]]))
+  bestgenes <- combmat[,which.max(dets)]
+  ord <- order(c(bestgenes, setdiff(1:m, bestgenes)))
+  ## break the matrix into B1 and B2
+  B1 <- B[bestgenes,]; B1inv <- solve(B1); B2 <- B[-bestgenes,]
+  Cmat <- cbind(rbind(B1 %*% A %*% B1inv, B2 %*% A %*% B1inv),matrix(0,nrow=m,ncol=(m-K)))
+  Cmat <- Cmat[ord,ord]
+  attr(Cmat, "bestgenes") <- bestgenes
+  return(Cmat)
+}
+
+
 ## karcher.mean <- function(Ws) {
 ##   ## the karcher mean/centroid on Gr(m,n)
 ##   N <- length(Ws)                       #sample size
