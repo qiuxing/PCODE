@@ -71,7 +71,11 @@ lowdim.est <- function(Ts, xhats, xhats.curves, method=c("FME", "pda"), lambda=0
   ## a spline representation of xhats
   xhats.fit.curves <- smooth.basis(Ts, xhats.fit, mypar)[["fd"]]
 
-  return(list(Ahat=Ahat, bvec=bvec, deviance=deviance(myfit), iterations=myfit[["iterations"]],xhats.fit=xhats.fit, xhats.fit.curves=xhats.fit.curves,Times=Ts))
+  return(list(Ahat=Ahat, bvec=bvec,
+              deviance=deviance(myfit),
+              iterations=myfit[["iterations"]],
+              xhats.fit=xhats.fit,
+              xhats.fit.curves=xhats.fit.curves,Times=Ts))
 }
 
 ## The main function
@@ -108,29 +112,32 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
                Ahat=intrinsic.system[["Ahat"]],
                bvec=intrinsic.system[["bvec"]],
                Bhat=pca.results[["Bhat"]], Binv=pca.results[["Binv"]],
+               meancur=pca.results[["meancur"]],
+               centers=pca.results[["centers"]],
                pca.results=pca.results,
                intrinsic.system=intrinsic.system))
 }
 
 ## between-subject fitting.  Note that y0.new must be a column vector.  As of ver 0.02, this prediction function does not work well with const != 0 case.
-predict.pcode1 <- function(pcode.fit, y0.new, Ts.new="same"){
-  ## This function only works with un-centered version as of 09/08/2012.
-  Ts <- pcode.fit[["Times"]];
-  if (is.character(Ts.new) && Ts.new=="same"){
+predict.pcode1 <- function(pcode.fit, y0.new, Ts.new=NULL){
+  Ts <- pcode.fit[["Times"]]; centers <- pcode.fit[["centers"]]
+  if (is.null(Ts.new)){
     Ts.new <- Ts
   }
-  xhat0 <- as.vector(pcode.fit[["Binv"]] %*% y0.new)
-  xhats.fit <- Xfun(pars=as.vector(pcode.fit[["Ahat"]]), Ts.new, xinit=xhat0, const=FALSE)[,-1]
-  y.fit <- as.matrix(xhats.fit) %*% t(pcode.fit[["Bhat"]])
+  xhat0 <- as.vector(pcode.fit[["Binv"]] %*% (y0.new - centers[1]))
+  CC <- cbind(pcode.fit[["bvec"]], pcode.fit[["Ahat"]])
+  pars1 <- as.vector(CC)
+  xhats.fit <- Xfun(pars=pars1, Ts.new, xinit=xhat0, const=TRUE)[,-1]
+  y.fit <- sweep(as.matrix(xhats.fit) %*% t(pcode.fit[["Bhat"]]), 1, -centers)
   return (y.fit)
 }
 
 ## wrapper for between subject cross-validation. As of ver 0.02, this function does not work with const=TRUE case.
-CV.group <- function(Ylist, Ts, K, const=FALSE, ...){
+CV.group <- function(Ylist, Ts, K, center=FALSE, const=FALSE, ...){
   m <- ncol(Ylist[[1]])
   y.fit.list <- foreach(n=1:length(Ylist)) %dopar%{
     Ylist.n <- Ylist[-n]; Yn <- Ylist[[n]]
-    meansys <- PCODE(Ylist.n, Ts=Ts, K=K, const=const, ...)
+    meansys <- PCODE(Ylist.n, Ts=Ts, K=K, center=center, const=const, ...)
     predict.pcode1(meansys, Yn[1,])
   }
   rss <- sapply(1:length(Ylist), function(n) sum((Ylist[[n]]-y.fit.list[[n]])^2))/m

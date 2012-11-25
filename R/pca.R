@@ -16,8 +16,8 @@ pcafun <- function(y,Ts,K, lambda=0.01, method=c("fpca", "pca", "spca"),
       meancur <- rr[["meanfd"]]
       centers <- as.vector(eval.fd(rr[["meanfd"]],Ts))
     } else {
-      centers <- rep(0,nrow(y))
-      meancur <- fd(rep(0, mybasis$nbasis), mybasis)
+      centers <- rep(0.0,nrow(y))
+      meancur <- fd(rep(0.0, mybasis$nbasis), mybasis)
     }; names(centers) <- rownames(y)
     Bhat <- rr[["scores"]]; dimnames(Bhat) <- list(colnames(y),pcnames)
     Bhat.qr <- qr(Bhat)
@@ -33,7 +33,7 @@ pcafun <- function(y,Ts,K, lambda=0.01, method=c("fpca", "pca", "spca"),
     if (center) {
       centers <- rr[["center"]]
     } else {
-      centers <- rep(0,nrow(y))
+      centers <- rep(0.0,nrow(y))
     }
     meancur <- smooth.basis(Ts, centers, mypar)[["fd"]]
     xhats <- rr[["rotation"]][,1:K]  #The first K eigenvectors
@@ -61,10 +61,11 @@ group.pcafun <- function(Ylist, Ts, K, method=c("fpca", "pca", "spca"), ...){
   ## The Graff mean of these PCA results
   pca.mean <- graff.mean(pcalist)
   ## recompute Bhat for each data
-  Bhats2 <- lapply(Ylist, reprojection, PCA1=pca.mean)
+  Bhats2 <- lapply(Ylist, reprojection, PCA1=pca.mean, Bhat.only=TRUE)
   Bmean <- Reduce("+", Bhats2)/length(Ylist)
   Bmean.inv <- solve(t(Bmean) %*% Bmean) %*% t(Bmean)
-  ## append these two terms in pca.mean
+  ## append these two terms in pca.mean. Note that affine projection
+  ## does not alter meancur/centers
   pca.mean[["Bhat"]] <- Bmean; pca.mean[["Binv"]] <- Bmean.inv
   return(pca.mean)
 }

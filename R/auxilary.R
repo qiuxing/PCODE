@@ -65,7 +65,7 @@ graff.mean <- function(pcalist){
     meancur.proj.coefs <- coef(mean.xhats.curves) %*% inprod(mean.xhats.curves, meancurs)
     mean.meancur <- mean(fd(meancurs.coefs - meancur.proj.coefs, mybasis))
     mean.xhats <- eval.fd(mean.xhats.curves, Ts)
-    mean.centers <- eval.fd(mean.meancur, Ts)
+    mean.centers <- as.vector(eval.fd(mean.meancur, Ts))
   } else if  (method=="spca") {
     stop("Currently not available.")
   } else {
@@ -78,29 +78,44 @@ graff.mean <- function(pcalist){
 
 
 ## This function takes a linear subspace (results from a PCA) and
-## apply it to another set of data
-reprojection <- function(Y2, PCA1){
+## apply it to another set of data.  Its main purpose is to produce
+## the Bhat matrix, but it can be used to produce a full list of other
+## objects as well.  Note that the affine projection does not change
+## meancur/centers.
+reprojection <- function(Y2, PCA1, Bhat.only=TRUE){
   params <- PCA1[["parameters"]]; method <- params[["method"]]
   Ts <- params[["Ts"]]; K <- params[["K"]]
   pcnames <- paste("PC",1:K,sep="")
   if (method=="fpca"){
     Xt <- PCA1[["xhats.curves"]];  bs1 <- Xt[["basis"]]
+    meancur <- PCA1[["meancur"]]
     mypar <- fdPar(bs1, 2, lambda=params[["lambda"]])
     ycurves <- smooth.basis(Ts, Y2, mypar)[["fd"]]
+    ycurves.centered <- fd(sweep(coef(ycurves),1,as.vector(coef(meancur))),bs1)
     ## Since Xt may only be approx orthonormal, I use the following
     ## safer formula to compute Bhat
-    Bhat <- t(solve(inprod(Xt, Xt)) %*% inprod(Xt, ycurves))
+    Bhat <- t(solve(inprod(Xt, Xt)) %*% inprod(Xt, ycurves.centered))
   } else if (method=="pca"){
     X <- PCA1[["xhats"]]
-    Bhat <- t(solve(t(X) %*% X) %*% t(X) %*% Y2)
+    Y2.centered <- sweep(Y2, 1, PCA1[["centers"]])
+    Bhat <- t(solve(t(X) %*% X) %*% t(X) %*% Y2.centered)
   } else if (method=="spca"){
+    ## identical to the method used for pca. In the future may have a
+    ## different implementation.
     X <- PCA1[["xhats"]]
-    Bhat <- t(solve(t(X) %*% X) %*% t(X) %*% Y2)
+    Y2.centered <- sweep(Y2, 1, PCA1[["centers"]])
+    Bhat <- t(solve(t(X) %*% X) %*% t(X) %*% Y2.centered)
   } else {
     stop("Only the following PCA methods are implemented: fpca, pca, spca.")
   }
   rownames(Bhat) <- colnames(Y2); colnames(Bhat) <- pcnames
-  return(Bhat)
+
+  if (Bhat.only){
+    return(Bhat)
+  } else {
+    PCA1[["Bhat"]] <- Bhat
+    return(PCA1)
+  }
 }
 
 
