@@ -12,10 +12,38 @@ projected.fnorm <- function(V, W){
     Qw <- qr.Q(qr(Lambda.root %*% t(Tbeta) %*% coef(W)))
   } else if (is.matrix(V) && is.matrix(W)){ #pca objects
     Qv <- qr.Q(qr(V)); Qw <- qr.Q(qr(W))
-  } else 
+  } else
   diffmat <- Qv %*% t(Qv) - Qw %*% t(Qw)
   return(norm(diffmat, "F")/sqrt(2))
 }
+
+## Given two PCA results, produces the difference and the translation
+## matrix between the two.
+DiffPCA <- function(pca1, pca2){
+  parameters <- pca1[["parameters"]]
+  K <- parameters[["K"]]; method=parameters[["method"]]
+
+  if (method=="pca"){
+    centers1 <- pca1[["centers"]]; centers2 <- pca2[["centers"]]
+    X1 <- pca1[["xhats"]]; X2 <- pca2[["xhats"]]
+    
+
+  } else if (method=="fpca"){
+    lambda <- parameters[["lambda"]]
+    mybasis <- pca1[["xhats.curves"]][["basis"]]
+    mypar <- fdPar(mybasis, 2, lambda=lambda)  #under-smooth
+    Xt1 <- pca1[["xhats.curves"]]; Xt2 <- pca2[["xhats.curves"]]
+    meancur1 <- pca1[["meancur"]]; meancur2 <- pca2[["meancur"]]
+
+  } else if  (method=="spca") {
+    stop("Currently not available.")
+  } else {
+    stop("Only the following PCA methods are implemented: fpca, pca, spca.")
+  }
+
+
+}
+
 
 ## the procrustes mean on Graff(K,m). Needed by group.pcafun().
 graff.mean <- function(pcalist){
@@ -57,7 +85,7 @@ graff.mean <- function(pcalist){
     ## Qx are the Q_{\tilde{x}} in the manuscript
     Qxs <- lapply(Xts, function(X) qr.Q(qr(Lambda.root %*% t(Tbeta) %*% X)))
     Qxs2 <- lapply(Qxs, function(Qx) {Qx%*%t(Qx)})
-                 
+
     Phat <- Reduce("+", Qxs2)/n
     Ehat <- eigen(Phat)[["vectors"]][,1:K]
 
