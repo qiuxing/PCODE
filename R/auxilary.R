@@ -12,7 +12,9 @@ projected.fnorm <- function(V, W){
     Qw <- qr.Q(qr(Lambda.root %*% t(Tbeta) %*% coef(W)))
   } else if (is.matrix(V) && is.matrix(W)){ #pca objects
     Qv <- qr.Q(qr(V)); Qw <- qr.Q(qr(W))
-  } else
+  } else {
+    stop("Only the following PCA methods are implemented: fpca, pca, spca.")
+  }
   diffmat <- Qv %*% t(Qv) - Qw %*% t(Qw)
   return(norm(diffmat, "F")/sqrt(2))
 }
@@ -20,14 +22,13 @@ projected.fnorm <- function(V, W){
 ## Given two PCA results, produces the difference and the translation
 ## matrix between the two.
 DiffPCA <- function(pca1, pca2){
-  parameters <- pca1[["parameters"]]
-  K <- parameters[["K"]]; method=parameters[["method"]]
-
+  parameters <- pca1[["parameters"]]; method=parameters[["method"]]
   if (method=="pca"){
     centers1 <- pca1[["centers"]]; centers2 <- pca2[["centers"]]
     X1 <- pca1[["xhats"]]; X2 <- pca2[["xhats"]]
-    
-
+    Q1 <- qr.Q(qr(X1)); mu1 <- centers1 - Q1 %*% t(Q1) %*% centers1
+    Q2 <- qr.Q(qr(X2)); mu2 <- centers2 - Q2 %*% t(Q2) %*% centers2
+    mu.dist2 <- sum((mu1-mu2)^2)
   } else if (method=="fpca"){
     lambda <- parameters[["lambda"]]
     mybasis <- pca1[["xhats.curves"]][["basis"]]
@@ -35,13 +36,23 @@ DiffPCA <- function(pca1, pca2){
     Xt1 <- pca1[["xhats.curves"]]; Xt2 <- pca2[["xhats.curves"]]
     meancur1 <- pca1[["meancur"]]; meancur2 <- pca2[["meancur"]]
 
+    Beta <- fd(diag(mybasis[["nbasis"]]), mybasis)
+    SigmaBeta <- inprod(Beta, Beta); ee <- eigen(SigmaBeta)
+    Tbeta <- ee[["vectors"]]
+    Lambda.root <- diag(sqrt(ee[["values"]]))
+    ## Qv, Qw are the representation of V, W under an orthonormal basis
+    Q1 <- qr.Q(qr(Lambda.root %*% t(Tbeta) %*% coef(Xt1)))
+    Q2 <- qr.Q(qr(Lambda.root %*% t(Tbeta) %*% coef(Xt2)))
+
+    mu1 <- fd(coef(meancur1) -coef(Xt1)%*%inprod(Xt1, meancur1), mybasis)
+    mu2 <- fd(coef(meancur2) -coef(Xt2)%*%inprod(Xt2, meancur2), mybasis)
+    mu.dist2 <- as.real(inprod(mu1, mu2))
   } else if  (method=="spca") {
     stop("Currently not available.")
   } else {
     stop("Only the following PCA methods are implemented: fpca, pca, spca.")
   }
-
-
+  return(norm(Q1%*%t(Q1) - Q2%*%t(Q2),"F")^2 + mu.dist2)
 }
 
 
