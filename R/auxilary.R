@@ -21,7 +21,7 @@ projected.fnorm <- function(V, W){
 
 ## Given two PCA results, produces the difference and the translation
 ## matrix between the two.
-DiffPCA <- function(pca1, pca2){
+pdist2 <- function(pca1, pca2){
   parameters <- pca1[["parameters"]]; method=parameters[["method"]]
   if (method=="pca"){
     centers1 <- pca1[["centers"]]; centers2 <- pca2[["centers"]]
@@ -40,7 +40,6 @@ DiffPCA <- function(pca1, pca2){
     SigmaBeta <- inprod(Beta, Beta); ee <- eigen(SigmaBeta)
     Tbeta <- ee[["vectors"]]
     Lambda.root <- diag(sqrt(ee[["values"]]))
-    ## Qv, Qw are the representation of V, W under an orthonormal basis
     Q1 <- qr.Q(qr(Lambda.root %*% t(Tbeta) %*% coef(Xt1)))
     Q2 <- qr.Q(qr(Lambda.root %*% t(Tbeta) %*% coef(Xt2)))
 
@@ -55,6 +54,12 @@ DiffPCA <- function(pca1, pca2){
   return(norm(Q1%*%t(Q1) - Q2%*%t(Q2),"F")^2 + mu.dist2)
 }
 
+## The distance of the resulting ODE of Y
+vdist2 <- function(pcode1, pcode2){
+  A1 <- pcode1[["Ahat"]]; B1 <- pcode1[["Bhat"]]; Binv1 <- pcode1[["Binv"]]
+  A2 <- pcode2[["Ahat"]]; B2 <- pcode2[["Bhat"]]; Binv2 <- pcode2[["Binv"]]
+  return(norm(B1 %*% A1 %*% Binv1 - B2 %*% A2 %*% Binv2, "F")^2)
+}
 
 ## the procrustes mean on Graff(K,m). Needed by group.pcafun().
 graff.mean <- function(pcalist){
