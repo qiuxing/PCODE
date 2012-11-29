@@ -55,10 +55,17 @@ pdist2 <- function(pca1, pca2){
 }
 
 ## The distance of the resulting ODE of Y
-vdist2 <- function(pcode1, pcode2){
+fdist2 <- function(pcode1, pcode2){
+  Tlength <- diff(range(pcode1[["Times"]]))
   A1 <- pcode1[["Ahat"]]; B1 <- pcode1[["Bhat"]]; Binv1 <- pcode1[["Binv"]]
   A2 <- pcode2[["Ahat"]]; B2 <- pcode2[["Bhat"]]; Binv2 <- pcode2[["Binv"]]
-  return(norm(B1 %*% A1 %*% Binv1 - B2 %*% A2 %*% Binv2, "F")^2)
+  C1 <- solve(A1) %*% (expm(Tlength * A1) - diag(nrow(A1)))
+  C2 <- solve(A2) %*% (expm(Tlength * A2) - diag(nrow(A2)))
+  qr1 <- qr(B1); Q1 <- qr.Q(qr1); R1 <- qr.R(qr1)
+  qr2 <- qr(B2); Q2 <- qr.Q(qr2); R2 <- qr.R(qr2)
+  Q12 <- t(Q1) %*% Q2
+  diffmat <- R1%*%C1%*% solve(R1) - Q12%*% R2%*% C2 %*% solve(R2) %*% t(Q12)
+  return(norm(diffmat, "F")^2)
 }
 
 ## the procrustes mean on Graff(K,m). Needed by group.pcafun().
