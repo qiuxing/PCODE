@@ -40,9 +40,9 @@ lowdim.est <- function(Ts, xhats, xhats.curves, method=c("FME", "pda"), lambda=0
 
   if (const) {                           #inhomogeneous
     ## z is the smoothed xhats plus a constant 1 (for intercept terms)
-    z <- cbind(Const=rep(1,length(Ts)),eval.fd(xhats.curves,Ts))
+    z <- cbind(Const=rep(1,length(Ts)),eval.fd(Ts,xhats.curves))
     ## estimates of the derivatives
-    z.deriv <- cbind(Const=rep(0,length(Ts)), eval.fd(deriv(xhats.curves), Ts))
+    z.deriv <- cbind(Const=rep(0,length(Ts)), eval.fd(Ts,deriv(xhats.curves)))
     ## then use simple linear regression to obtain an approximate C0.
     ## remember CC is the t(CC) because regression matrix and ODE matrix
     ## differ by one transpose.
@@ -56,8 +56,8 @@ lowdim.est <- function(Ts, xhats, xhats.curves, method=c("FME", "pda"), lambda=0
     ## don't need the "time" column anymore
     xhats.fit <- as.matrix(Xfun(pars=coef(myfit), Ts, xinit=z[1,-1], const=const)[,-1])
   } else {                              #homogeneous
-    z <- eval.fd(xhats.curves,Ts)
-    z.deriv <- eval.fd(deriv(xhats.curves), Ts)
+    z <- eval.fd(Ts,xhats.curves)
+    z.deriv <- eval.fd(Ts,deriv(xhats.curves))
     CC0 <- t(solve(t(z) %*% z) %*% t(z) %*% z.deriv)
     pars0 <- as.vector(CC0)
     myfit <- modFit(f=Xcost, p=pars0, xinit=z[1,])
@@ -137,6 +137,7 @@ CV.group <- function(Ylist, Ts, K, center=FALSE, const=FALSE, ...){
   m <- ncol(Ylist[[1]])
   y.fit.list <- foreach(n=1:length(Ylist)) %dopar%{
     Ylist.n <- Ylist[-n]; Yn <- Ylist[[n]]
+    Ts=Ts; K=K
     meansys <- PCODE(Ylist.n, Ts=Ts, K=K, center=center, const=const, ...)
     predict.pcode1(meansys, Yn[1,])
   }

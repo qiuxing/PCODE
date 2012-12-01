@@ -149,7 +149,8 @@ reprojection <- function(Y2, PCA1, Bhat.only=FALSE){
     Bhat <- t(solve(inprod(Xt, Xt)) %*% inprod(Xt, ycurves.centered))
     ngenes <- ncol(coef(ycurves))
     ## Calculating the total variance
-    Beta <- fd(diag(mybasis[["nbasis"]]), mybasis); ee <- eigen(SigmaBeta)
+    Beta <- fd(diag(mybasis[["nbasis"]]), mybasis)
+    SigmaBeta <- inprod(Beta, Beta); ee <- eigen(SigmaBeta)
     Tbeta <- ee[["vectors"]]; Lambda.root <- diag(sqrt(ee[["values"]]))
     totalvar <- sum((t(ymat) %*% Tbeta %*% Lambda.root)^2)
     ## Now the variance of the projections.
