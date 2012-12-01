@@ -11,6 +11,7 @@ pcafun <- function(y,Ts,K, lambda=0.01, method=c("fpca", "pca", "spca"),
   pcnames <- paste("PC",1:K,sep="")
   if (method=="fpca"){
     rr <- pca.fd(ycurves, centerfns=center, nharm=K)
+    varprop <- rr[["varprop"]]
     ## as for the centers, fPCA is an odd ball.
     if (center) {
       meancur <- rr[["meanfd"]]
@@ -32,6 +33,7 @@ pcafun <- function(y,Ts,K, lambda=0.01, method=c("fpca", "pca", "spca"),
     xhats <- eval.fd(Ts, xhats.curves)
   } else if (method=="pca"){
     rr <- prcomp(t(y), center=center)
+    varlist <- rr[["sdev"]]^2; varprop <- varlist[1:K]/sum(varlist)
     if (center) {
       centers <- rr[["center"]]
     } else {
@@ -53,22 +55,28 @@ pcafun <- function(y,Ts,K, lambda=0.01, method=c("fpca", "pca", "spca"),
   ## Binv <- diag(1/sdev) %*% t(rotation)
   Binv <- solve(t(Bhat) %*% Bhat) %*% t(Bhat)
 
-  return(list(centers=centers, meancur=meancur, Bhat=Bhat, Binv=Binv, xhats=xhats, xhats.curves=xhats.curves, parameters=list(Ts=Ts, K=K, lambda=lambda, method=method,center=center, spca.para=spca.para)))
+  return(list(varprop=varprop, centers=centers, meancur=meancur, Bhat=Bhat, Binv=Binv, xhats=xhats, xhats.curves=xhats.curves, parameters=list(Ts=Ts, K=K, lambda=lambda, method=method,center=center, spca.para=spca.para)))
 }
 
 ## group.pcafun estimates a centroid for a group of data (xhats).
 group.pcafun <- function(Ylist, Ts, K, method=c("fpca", "pca", "spca"), ...){
-  method <- match.arg(method)
+  method <- match.arg(method); N <- length(Ylist)
   pcalist <- lapply(Ylist, pcafun, Ts=Ts, K=K, method=method, ...)
   ## The Graff mean of these PCA results
   pca.mean <- graff.mean(pcalist)
   ## recompute Bhat for each data
-  Bhats2 <- lapply(Ylist, reprojection, PCA1=pca.mean, Bhat.only=TRUE)
-  Bmean <- Reduce("+", Bhats2)/length(Ylist)
+  reproj <- lapply(Ylist, reprojection, PCA1=pca.mean)
+  Bhats2 <- lapply(reproj, function(rr) rr[["Bhat"]])
+  Bmean <- Reduce("+", Bhats2)/N
   Bmean.inv <- solve(t(Bmean) %*% Bmean) %*% t(Bmean)
+  ## calculate the varprop
+  varprops <- lapply(reproj, function(rr) rr[["varprop"]])
+  varprop <- Reduce("+", varprops)/N
   ## append these two terms in pca.mean. Note that affine projection
   ## does not alter meancur/centers
+  
   pca.mean[["Bhat"]] <- Bmean; pca.mean[["Binv"]] <- Bmean.inv
+  pca.mean[["varprop"]] <- varprop
   return(pca.mean)
 }
 

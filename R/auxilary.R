@@ -73,8 +73,8 @@ graff.mean <- function(pcalist){
   ## given a list of PCA or Graff objects (typically returned by
   ## pcafun()), returns a new PCA mean.
   n <- length(pcalist); parameters <- pcalist[[1]][["parameters"]]
-  K <- parameters[["K"]]; method=parameters[["method"]]
-  lambda <- parameters[["lambda"]]
+  Ts <- parameters[["Ts"]];  K <- parameters[["K"]]
+  method=parameters[["method"]]; lambda <- parameters[["lambda"]]
   mybasis <- pcalist[[1]][["xhats.curves"]][["basis"]]
   mypar <- fdPar(mybasis, 2, lambda=lambda)  #under-smooth
 
@@ -115,8 +115,8 @@ graff.mean <- function(pcalist){
     mean.xhats.curves <- fd(Tbeta %*% Lambda.negroot %*% Ehat, mybasis)
     meancur.proj.coefs <- coef(mean.xhats.curves) %*% inprod(mean.xhats.curves, meancurs)
     mean.meancur <- mean(fd(meancurs.coefs - meancur.proj.coefs, mybasis))
-    mean.xhats <- eval.fd(mean.xhats.curves, Ts)
-    mean.centers <- as.vector(eval.fd(mean.meancur, Ts))
+    mean.xhats <- eval.fd(Ts, mean.xhats.curves)
+    mean.centers <- as.vector(eval.fd(Ts, mean.meancur))
   } else if  (method=="spca") {
     stop("Currently not available.")
   } else {
@@ -133,7 +133,7 @@ graff.mean <- function(pcalist){
 ## the Bhat matrix, but it can be used to produce a full list of other
 ## objects as well.  Note that the affine projection does not change
 ## meancur/centers.
-reprojection <- function(Y2, PCA1, Bhat.only=TRUE){
+reprojection <- function(Y2, PCA1, Bhat.only=FALSE){
   params <- PCA1[["parameters"]]; method <- params[["method"]]
   Ts <- params[["Ts"]]; K <- params[["K"]]
   pcnames <- paste("PC",1:K,sep="")
@@ -143,19 +143,32 @@ reprojection <- function(Y2, PCA1, Bhat.only=TRUE){
     mypar <- fdPar(bs1, 2, lambda=params[["lambda"]])
     ycurves <- smooth.basis(Ts, Y2, mypar)[["fd"]]
     ycurves.centered <- fd(sweep(coef(ycurves),1,as.vector(coef(meancur))),bs1)
+    ymat <- coef(ycurves.centered)
     ## Since Xt may only be approx orthonormal, I use the following
     ## safer formula to compute Bhat
     Bhat <- t(solve(inprod(Xt, Xt)) %*% inprod(Xt, ycurves.centered))
+    ngenes <- ncol(coef(ycurves))
+    ## Calculating the total variance
+    Beta <- fd(diag(mybasis[["nbasis"]]), mybasis); ee <- eigen(SigmaBeta)
+    Tbeta <- ee[["vectors"]]; Lambda.root <- diag(sqrt(ee[["values"]]))
+    totalvar <- sum((t(ymat) %*% Tbeta %*% Lambda.root)^2)
+    ## Now the variance of the projections.
+    Lambdas <- sqrt(eigen(inprod(Xt, Xt))[["values"]])
+    varlist <- sapply(1:K, function(k) sum((Bhat[,k]*Lambdas[k])^2))
   } else if (method=="pca"){
     X <- PCA1[["xhats"]]
     Y2.centered <- sweep(Y2, 1, PCA1[["centers"]])
     Bhat <- t(solve(t(X) %*% X) %*% t(X) %*% Y2.centered)
+    totalvar <- sum(Y2.centered^2)
+    varlist <- sapply(1:K, function(k) sum((Bhat[,k] %*% t(X[,k]))^2))
   } else if (method=="spca"){
     ## identical to the method used for pca. In the future may have a
     ## different implementation.
     X <- PCA1[["xhats"]]
     Y2.centered <- sweep(Y2, 1, PCA1[["centers"]])
     Bhat <- t(solve(t(X) %*% X) %*% t(X) %*% Y2.centered)
+    totalvar <- sum(Y2.centered^2)
+    varlist <- sapply(1:K, function(k) sum((Bhat[,k] %*% t(X[,k]))^2))
   } else {
     stop("Only the following PCA methods are implemented: fpca, pca, spca.")
   }
@@ -164,7 +177,7 @@ reprojection <- function(Y2, PCA1, Bhat.only=TRUE){
   if (Bhat.only){
     return(Bhat)
   } else {
-    PCA1[["Bhat"]] <- Bhat
+    PCA1[["Bhat"]] <- Bhat; PCA1[["varprop"]] <- varlist/totalvar
     return(PCA1)
   }
 }
