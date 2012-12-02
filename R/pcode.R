@@ -105,12 +105,12 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
   wxhats.curves <- fd(coef(xhats.curves) %*% diag(lambda.root), mybasis)
   intrinsic.system <- lowdim.est(Ts, xhats=wxhats, xhats.curves=wxhats.curves, method=lowdim.method, lambda=lambda, const=const)
   xhats.fit <- intrinsic.system[["xhats.fit"]] %*% diag(1/lambda.root)
-  colnames(xhats.fit) <- paste("K",1:K,sep="")
+  pcnames <- paste("PC",1:K,sep=""); colnames(xhats.fit) <- pcnames
   ## Done fitting intrinsic system. Now translate these weighted
   ## curves back.
   wxhats.fit.curves <- intrinsic.system[["xhats.fit.curves"]]
   xcoefs <- coef(wxhats.fit.curves) %*% diag(1/lambda.root)
-  colnames(xcoefs) <- paste("K",1:K,sep="")
+  colnames(xcoefs) <- pcnames
   xhats.fit.curves <- fd(xcoefs,mybasis)
   muvec <- matrix(rep(pca.results[["centers"]], m), nrow=length(Ts))
   y.fit <- xhats.fit %*% t(pca.results[["Bhat"]]) + muvec
