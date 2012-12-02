@@ -28,7 +28,9 @@ Xfun <- function(pars, Ts, xinit, const=TRUE){
 ## C.init.est(). const=T/F: whether the equation system is homogeneous
 ## or inhomogeneous.
 lowdim.est <- function(Ts, xhats, xhats.curves, method=c("FME", "pda"), lambda=0.01, const=TRUE){
-  K <- ncol(xhats)
+  K <- ncol(xhats); pcnames <- paste("PC",1:K,sep="")
+  ## must make sure both xhats and xinit has the same, non-null names
+  colnames(xhats) <- pcnames
   mybasis <- xhats.curves[["basis"]]
   mypar <- fdPar(mybasis, 2, lambda=lambda)
 
@@ -50,21 +52,25 @@ lowdim.est <- function(Ts, xhats, xhats.curves, method=c("FME", "pda"), lambda=0
     ## pars0[1:K] (the first column) are the constant terms. Others form
     ## the Ahat
     pars0 <- as.vector(CC0[-1,])
-    myfit <- modFit(f=Xcost, p=pars0, xinit=z[1,-1])
+    ## must make sure both xhats and xinit has the same, non-null names
+    x0 <- z[1,-1]; names(x0) <- colnames(xhats)
+    myfit <- modFit(f=Xcost, p=pars0, xinit=x0)
     CC <- matrix(coef(myfit), ncol=K+1)
     Ahat <- CC[,-1]; bvec <- CC[,1]
     ## don't need the "time" column anymore
-    xhats.fit <- as.matrix(Xfun(pars=coef(myfit), Ts, xinit=z[1,-1], const=const)[,-1])
+    xhats.fit <- as.matrix(Xfun(pars=coef(myfit), Ts, xinit=x0, const=const)[,-1])
   } else {                              #homogeneous
     z <- eval.fd(Ts,xhats.curves)
     z.deriv <- eval.fd(Ts,deriv(xhats.curves))
     CC0 <- t(solve(t(z) %*% z) %*% t(z) %*% z.deriv)
     pars0 <- as.vector(CC0)
-    myfit <- modFit(f=Xcost, p=pars0, xinit=z[1,])
+    ## must make sure both xhats and xinit has the same, non-null names
+    x0 <- z[1,]; names(x0) <- colnames(xhats)
+    myfit <- modFit(f=Xcost, p=pars0, xinit=x0)
+
     Ahat <- matrix(coef(myfit), ncol=K); bvec <- rep(0,K)
-    xhats.fit <- as.matrix(Xfun(pars=coef(myfit), Ts, xinit=z[1,], const=const)[,-1])
+    xhats.fit <- as.matrix(Xfun(pars=coef(myfit), Ts, xinit=x0, const=const)[,-1])
   }
-  pcnames <- paste("PC",1:K,sep="")
   dimnames(Ahat) <- list(pcnames, pcnames)
   names(bvec) <- pcnames
   rownames(xhats.fit) <- Ts
@@ -89,12 +95,22 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
     m <- ncol(y)
     pca.results <- pcafun(y, Ts, K=K, lambda=lambda, method=pca.method, center=center, spca.para=spca.para)
   }
-
-  intrinsic.system <- lowdim.est(Ts, xhats=pca.results[["xhats"]], xhats.curves=pca.results[["xhats.curves"]], method=lowdim.method, lambda=lambda, const=const)
-  xhats.fit <- intrinsic.system[["xhats.fit"]]
-  xhats.fit.curves <- intrinsic.system[["xhats.fit.curves"]]
-  mybasis <- xhats.fit.curves[["basis"]]
-
+  ## now use square root of varprop to weight xhats, xhats.curves
+  lambda.root <- sqrt(pca.results[["varprop"]])
+  wxhats <- pca.results[["xhats"]] %*% diag(lambda.root)
+  xhats.curves <- pca.results[["xhats.curves"]]
+  mybasis <- xhats.curves[["basis"]]
+  ## below starts the fitting of the intrinsic system.  Note that we
+  ## use sqrt(varprop) to weight xhats and xhats.curves.
+  wxhats.curves <- fd(coef(xhats.curves) %*% diag(lambda.root), mybasis)
+  intrinsic.system <- lowdim.est(Ts, xhats=wxhats, xhats.curves=wxhats.curves, method=lowdim.method, lambda=lambda, const=const)
+  xhats.fit <- intrinsic.system[["xhats.fit"]] %*% diag(1/lambda.root)
+  ## Done fitting intrinsic system. Now translate these weighted
+  ## curves back.
+  wxhats.fit.curves <- intrinsic.system[["xhats.fit.curves"]]
+  xcoefs <- coef(wxhats.fit.curves) %*% diag(1/lambda.root)
+  colnames(xcoefs) <- paste("K",1:K,sep="")
+  xhats.fit.curves <- fd(xcoefs,mybasis)
   muvec <- matrix(rep(pca.results[["centers"]], m), nrow=length(Ts))
   y.fit <- xhats.fit %*% t(pca.results[["Bhat"]]) + muvec
   mucoef <- matrix(rep(coef(pca.results[["meancur"]]), m), ncol=m)

@@ -11,7 +11,7 @@ pcafun <- function(y,Ts,K, lambda=0.01, method=c("fpca", "pca", "spca"),
   pcnames <- paste("PC",1:K,sep="")
   if (method=="fpca"){
     rr <- pca.fd(ycurves, centerfns=center, nharm=K)
-    varprop <- rr[["varprop"]]
+    varprop <- rr[["varprop"]]; names(varprop) <- pcnames
     ## as for the centers, fPCA is an odd ball.
     if (center) {
       meancur <- rr[["meanfd"]]
@@ -34,6 +34,7 @@ pcafun <- function(y,Ts,K, lambda=0.01, method=c("fpca", "pca", "spca"),
   } else if (method=="pca"){
     rr <- prcomp(t(y), center=center)
     varlist <- rr[["sdev"]]^2; varprop <- varlist[1:K]/sum(varlist)
+    names(varprop) <- pcnames
     if (center) {
       centers <- rr[["center"]]
     } else {
