@@ -139,6 +139,7 @@ reprojection <- function(Y2, PCA1, Bhat.only=FALSE){
   pcnames <- paste("PC",1:K,sep="")
   if (method=="fpca"){
     Xt <- PCA1[["xhats.curves"]];  bs1 <- Xt[["basis"]]
+    mybasis <- Xt[["basis"]]
     meancur <- PCA1[["meancur"]]
     mypar <- fdPar(bs1, 2, lambda=params[["lambda"]])
     ycurves <- smooth.basis(Ts, Y2, mypar)[["fd"]]
