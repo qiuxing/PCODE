@@ -105,6 +105,7 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
   wxhats.curves <- fd(coef(xhats.curves) %*% diag(lambda.root), mybasis)
   intrinsic.system <- lowdim.est(Ts, xhats=wxhats, xhats.curves=wxhats.curves, method=lowdim.method, lambda=lambda, const=const)
   xhats.fit <- intrinsic.system[["xhats.fit"]] %*% diag(1/lambda.root)
+  colnames(xhats.fit) <- paste("K",1:K,sep="")
   ## Done fitting intrinsic system. Now translate these weighted
   ## curves back.
   wxhats.fit.curves <- intrinsic.system[["xhats.fit.curves"]]
