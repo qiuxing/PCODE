@@ -104,7 +104,7 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
   ## use sqrt(varprop) to weight xhats and xhats.curves.
   wxhats.curves <- fd(coef(xhats.curves) %*% diag(lambda.root), mybasis)
   intrinsic.system <- lowdim.est(Ts, xhats=wxhats, xhats.curves=wxhats.curves, method=lowdim.method, lambda=lambda, const=const)
-  wAhat <- intrinsic.system[["Ahat"]]; wbvec <- bvec
+  wAhat <- intrinsic.system[["Ahat"]]; wbvec <- intrinsic.system[["bvec"]]
   Ahat <- diag(1/lambda.root) %*% wAhat %*% diag(lambda.root)
   bvec <- diag(1/lambda.root) %*% wbvec
   xhats.fit <- intrinsic.system[["xhats.fit"]] %*% diag(1/lambda.root)
