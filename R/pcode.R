@@ -104,6 +104,9 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
   ## use sqrt(varprop) to weight xhats and xhats.curves.
   wxhats.curves <- fd(coef(xhats.curves) %*% diag(lambda.root), mybasis)
   intrinsic.system <- lowdim.est(Ts, xhats=wxhats, xhats.curves=wxhats.curves, method=lowdim.method, lambda=lambda, const=const)
+  wAhat <- intrinsic.system[["Ahat"]]; wbvec <- bvec
+  Ahat <- diag(1/lambda.root) %*% wAhat %*% diag(lambda.root)
+  bvec <- diag(1/lambda.root) %*% wbvec
   xhats.fit <- intrinsic.system[["xhats.fit"]] %*% diag(1/lambda.root)
   pcnames <- paste("PC",1:K,sep=""); colnames(xhats.fit) <- pcnames
   ## Done fitting intrinsic system. Now translate these weighted
@@ -125,14 +128,13 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
   return (list(Times=Ts, xhats.fit=xhats.fit,
                xhats.fit.curves=xhats.fit.curves,
                y.fit=y.fit, y.fit.curves=y.fit.curves,
-               rss=rss,
-               Ahat=intrinsic.system[["Ahat"]],
-               bvec=intrinsic.system[["bvec"]],
+               rss=rss, varprop=pca.results[["varprop"]],
+               Ahat=Ahat, bvec=bvec,
                Bhat=pca.results[["Bhat"]], Binv=pca.results[["Binv"]],
                meancur=pca.results[["meancur"]],
                centers=pca.results[["centers"]],
                pca.results=pca.results,
-               intrinsic.system=intrinsic.system))
+               weighted.intrinsic.system=intrinsic.system))
 }
 
 ## between-subject fitting.  Note that y0.new must be a column vector.  As of ver 0.02, this prediction function does not work well with const != 0 case.
