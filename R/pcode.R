@@ -162,11 +162,17 @@ CV.group <- function(Ylist, Ts, K, center=FALSE, const=FALSE, ...){
   }
   y.fit.list <- lapply(1:N, function(n) predict.pcode1(trainsys[[n]], Ylist[[n]][1,]))
   rss <- sapply(1:N, function(n) sum((Ylist[[n]]-y.fit.list[[n]])^2))/ncol(Ylist[[1]])
-  ## produce the CV fitted curves as well
+  ## ## To view RSS from anthother angle, the explained L^2 norm
+  ## squared. Scratch this. Not an orthogonal decomposition so no
+  ## var-decomposition.  totalL2 <- sum(sapply(Ylist, function(y)
+  ## sum(y^2))) L2.fit <- sum(sapply(y.fit.list, function(y)
+  ## sum(y^2))) L2prop <- L2.fit/totalL2 produce the CV fitted curves
+  ## as well
   mybasis <- trainsys[[1]][["y.fit.curves"]][["basis"]]
   lambda <- trainsys[[1]][["lambda"]]
   mypar <- fdPar(mybasis, 2, lambda=lambda)
   y.fit.curves.list <- lapply(y.fit.list, function(y) smooth.basis(Ts, y, mypar)[["fd"]])
+  ## Assign proper subject names for convenience
   names(y.fit.list) <- names(Ylist); names(y.fit.curves.list) <- names(Ylist)
   names(rss) <- names(Ylist)
   return(list(trainsys=trainsys, y.fit.list=y.fit.list, y.fit.curves.list=y.fit.curves.list, rss=rss, lambda=lambda, Ts=Ts))

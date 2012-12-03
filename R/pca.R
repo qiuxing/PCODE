@@ -15,7 +15,7 @@ pcafun <- function(y,Ts,K, lambda=0.01, method=c("fpca", "pca", "spca"),
     if (center) {
       meancur <- rr[["meanfd"]]
       ## centers <- as.vector(eval.fd(rr[["meanfd"]],Ts))
-      centers <- as.vector(Ts, eval.fd(rr[["meanfd"]]))
+      centers <- as.vector(eval.fd(Ts,rr[["meanfd"]]))
     } else {
       centers <- rep(0.0,nrow(y))
       meancur <- fd(rep(0.0, mybasis$nbasis), mybasis)
