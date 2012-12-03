@@ -56,7 +56,7 @@ pdist2 <- function(pca1, pca2){
 
 ## The distance of the resulting ODE of Y
 fdist2 <- function(pcode1, pcode2){
-  Tlength <- diff(range(pcode1[["Times"]]))
+  Tlength <- diff(range(pcode1[["Ts"]]))
   A1 <- pcode1[["Ahat"]]; B1 <- pcode1[["Bhat"]]; Binv1 <- pcode1[["Binv"]]
   A2 <- pcode2[["Ahat"]]; B2 <- pcode2[["Bhat"]]; Binv2 <- pcode2[["Binv"]]
   C1 <- solve(A1) %*% (expm(Tlength * A1) - diag(nrow(A1)))

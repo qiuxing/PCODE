@@ -6,7 +6,6 @@ pcafun <- function(y,Ts,K, lambda=0.01, method=c("fpca", "pca", "spca"),
   method <- match.arg(method)
   mybasis <- create.bspline.basis(range(Ts), length(Ts)+4-2, 4, Ts)
   mypar <- fdPar(mybasis, 2, lambda=lambda)  #under-smooth
-
   ycurves <- smooth.basis(Ts, y, mypar)[["fd"]]
   pcnames <- paste("PC",1:K,sep="")
   if (method=="fpca"){

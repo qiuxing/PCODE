@@ -81,7 +81,7 @@ lowdim.est <- function(Ts, xhats, xhats.curves, method=c("FME", "pda"), lambda=0
               deviance=deviance(myfit),
               iterations=myfit[["iterations"]],
               xhats.fit=xhats.fit,
-              xhats.fit.curves=xhats.fit.curves,Times=Ts))
+              xhats.fit.curves=xhats.fit.curves,Ts=Ts))
 }
 
 ## The main function
@@ -125,7 +125,7 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
   } else {                              #just one subject
     rss <- sum((y-y.fit)^2/m)
   }
-  return (list(Times=Ts, xhats.fit=xhats.fit,
+  return (list(Ts=Ts, xhats.fit=xhats.fit,
                xhats.fit.curves=xhats.fit.curves,
                y.fit=y.fit, y.fit.curves=y.fit.curves,
                rss=rss, varprop=pca.results[["varprop"]],
@@ -133,13 +133,14 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
                Bhat=pca.results[["Bhat"]], Binv=pca.results[["Binv"]],
                meancur=pca.results[["meancur"]],
                centers=pca.results[["centers"]],
+               lambda=lambda,
                pca.results=pca.results,
                weighted.intrinsic.system=intrinsic.system))
 }
 
 ## between-subject fitting.  Note that y0.new must be a column vector.  As of ver 0.02, this prediction function does not work well with const != 0 case.
 predict.pcode1 <- function(pcode.fit, y0.new, Ts.new=NULL){
-  Ts <- pcode.fit[["Times"]]; centers <- pcode.fit[["centers"]]
+  Ts <- pcode.fit[["Ts"]]; centers <- pcode.fit[["centers"]]
   if (is.null(Ts.new)){
     Ts.new <- Ts
   }
@@ -153,19 +154,90 @@ predict.pcode1 <- function(pcode.fit, y0.new, Ts.new=NULL){
 
 ## wrapper for between subject cross-validation. As of ver 0.02, this function does not work with const=TRUE case.
 CV.group <- function(Ylist, Ts, K, center=FALSE, const=FALSE, ...){
-  m <- ncol(Ylist[[1]])
-  y.fit.list <- foreach(n=1:length(Ylist)) %dopar%{
-    Ylist.n <- Ylist[-n]; Yn <- Ylist[[n]]
+  N <- length(Ylist)
+  trainsys <- foreach(n=1:length(Ylist)) %dopar%{
+    Ylist.n <- Ylist[-n]
     Ts=Ts; K=K
-    meansys <- PCODE(Ylist.n, Ts=Ts, K=K, center=center, const=const, ...)
-    predict.pcode1(meansys, Yn[1,])
+    PCODE(Ylist.n, Ts=Ts, K=K, center=center, const=const, ...)
   }
-  rss <- sapply(1:length(Ylist), function(n) sum((Ylist[[n]]-y.fit.list[[n]])^2))/m
-  return(list(y.fit.list=y.fit.list, rss=rss))
+  y.fit.list <- lapply(1:N, function(n) predict.pcode1(trainsys[[n]], Ylist[[n]][1,]))
+  rss <- sapply(1:N, function(n) sum((Ylist[[n]]-y.fit.list[[n]])^2))/ncol(Ylist[[1]])
+  ## produce the CV fitted curves as well
+  mybasis <- trainsys[[1]][["y.fit.curves"]][["basis"]]
+  lambda <- trainsys[[1]][["lambda"]]
+  mypar <- fdPar(mybasis, 2, lambda=lambda)
+  y.fit.curves.list <- lapply(y.fit.list, function(y) smooth.basis(Ts, y, mypar)[["fd"]])
+  names(y.fit.list) <- names(Ylist); names(y.fit.curves.list) <- names(Ylist)
+  names(rss) <- names(Ylist)
+  return(list(trainsys=trainsys, y.fit.list=y.fit.list, y.fit.curves.list=y.fit.curves.list, rss=rss, lambda=lambda, Ts=Ts))
 }
 
 
 ## ## wrapper for plotting
-## plot.pcode <- function(pcode.result){
+plot.pcode <- function(y, pcode.result, true.y.curves=NULL, genes=NULL, plot.orig.curves=TRUE, ...){
+  ngenes <- ncol(y); Ts <- pcode.result[["Ts"]]
+  ## By default, plot the first 12 genes. Otherwise, plot genes listed
+  ## in the genes.
+  if (is.null(genes)) genes=seq(min(ngenes,12))
 
-## }
+  y2 <- y[,genes]; y2.fit.curves <- pcode.result[["y.fit.curves"]][genes]
+  if (is.null(colnames(y2))) {
+    ynames <- paste("y", genes, sep="")
+  } else {
+    ynames <- colnames(y2)
+  }
+  ## Smooth the original data and plot the smoothed curves as well.
+  if (plot.orig.curves){
+    lambda <- pcode.result[["lambda"]]
+    mybasis <- y2.fit.curves[["basis"]]
+    mypar <- fdPar(mybasis, 2, lambda=lambda)
+    y2.fit.orig <- smooth.basis(Ts, y2, mypar)[["fd"]]
+  }  
+
+  if (!is.null(true.y.curves)) true.y2.curves <- true.y.curves[genes]
+
+  ## Now plot these curves
+  for (i in 1:length(genes)){
+    plot(Ts, y2[,i], ylab=ynames[i], xlab="Time", ...)
+    lines(y2.fit.curves[i])
+    if (plot.orig.curves) lines(y2.fit.orig[i], col="grey")
+    if (!is.null(true.y.curves)) lines(y2.fit.orig[i], col="blue")
+  }
+}
+
+## another wrapper for CV results.
+plot.cv <- function(Ylist, cv.results, true.y.curves=NULL, genes=NULL, subjects=NULL, plot.orig.curves=TRUE, ...){
+  N <- length(Ylist); ngenes <- ncol(Ylist[[1]]); Ts <- cv.results[["Ts"]]
+  ## If not specified, use the first three subjects.
+  if (is.null(subjects)) subjects <- seq(min(N,3))
+  ## By default, plot the first 4 genes per each subjects. Otherwise,
+  ## plot genes listed in the genes.
+  if (is.null(genes)) genes=seq(min(ngenes,4))
+
+  for (ss in subjects){
+    y2 <- Ylist[[ss]][,genes]
+    y2.fit.curves <- cv.results[["y.fit.curves.list"]][[ss]][genes]
+    if (is.null(colnames(y2))) {
+      ynames <- paste("y", genes, sep="")
+    } else {
+      ynames <- colnames(y2)
+    }
+    ## Smooth the original data and plot the smoothed curves as well.
+    if (plot.orig.curves){
+      lambda <- cv.results[["lambda"]]
+      mybasis <- y2.fit.curves[["basis"]]
+      mypar <- fdPar(mybasis, 2, lambda=lambda)
+      y2.fit.orig <- smooth.basis(Ts, y2, mypar)[["fd"]]
+    }
+    
+    if (!is.null(true.y.curves)) true.y2.curves <- true.y.curves[[ss]][genes]
+
+    ## Now plot these curves
+    for (i in 1:length(genes)){
+      plot(Ts, y2[,i], ylab=ynames[i], xlab="Time", main=ss, ...)
+      lines(y2.fit.curves[i])
+      if (plot.orig.curves) lines(y2.fit.orig[i], col="grey")
+      if (!is.null(true.y.curves)) lines(y2.fit.orig[i], col="blue")
+    }
+  }
+}
