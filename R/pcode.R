@@ -3,89 +3,164 @@
 ## wrapper for linear (homogeneous or inhomogeneous) ODE
 ## solver. const=T/F: whether the equation system is homogeneous or
 ## inhomogeneous.
-
-Xfun <- function(pars, Ts, xinit, const=TRUE){
-  K <- length(xinit)
-  if (const) {                          #inhomogeneous
-    xderiv <- function(t, x, pars){
-      ## pars is the vector form of both matrix A and constant vector
-      ## b.
-      CC <- matrix(pars, ncol=K+1)
-      Ahat <- CC[,-1]; bvec <- CC[,1]
-      list(t(Ahat %*% x)+bvec)
-    }} else {                             #homogeneous
-      xderiv <- function(t, x, pars){
-        Ahat <- matrix(pars, ncol=K)
-        list(t(Ahat %*% x))
-      }
-    }
+ode.fit <- function(Ts, xinit, A, b=NULL){
+  if (is.null(b)) b <- rep(0,ncol(A))
+  pars <- list(A=A,b=b)
+  xderiv <- function(Time, x, pars){
+    with(as.list(c(x, pars)), {
+      return(list(t(A %*% x)+b))
+    })
+  }
   out <- ode(y=xinit, parms=pars, times=Ts, func=xderiv)
   as.data.frame(out)
+}
+
+## The two-stage backend
+.est.2stage <- function(Xt){
+  X <- eval.fd(Ts, Xt); X.deriv <- eval.fd(Ts,deriv(Xt))
+  Ahat <- t(X.deriv) %*% X %*% solve(t(X) %*% X)
+  return(Ahat)
+}
+
+## The unweighted PDA backend.
+.est.pda <- function(Xt) {
+  Sigma.xx <- inprod(Xt, Xt)
+  Sigma.xderivx <- inprod(deriv(Xt), Xt)
+  Ahat <- Sigma.xderivx %*% solve(Sigma.xx)
+  return(Ahat)
+}
+
+## This is a full least-square method
+.est.FME <- function(Ts, Xt, xhats, const) {
+  Xcost <- function(pars, Ts, xinit, const){
+    if (const) {
+      Ab <- matrix(pars, ncol=length(xinit)+1)
+      A <- Ab[-1,-1]; b <- Ab[-1,1]
+      out <- ode.fit(Ts, xinit, A, b)
+    } else {
+      A <- matrix(pars, ncol=length(xinit))
+      out <- ode.fit(Ts, xinit, A)
+    }
+    cost <- modCost(model=out, obs=cbind(time=Ts, xhats))
+    return(cost)
+  }
+
+  ## use 2-stage method to estimate the initial values
+  Ab0 <- .est.2stage(Xt)
+
+  X <- eval.fd(Ts, Xt)
+  if (const) {                           #inhomogeneous
+    x0 <- X[1,-1]
+  } else {                              #homogeneous
+    x0 <- X[1,]
+  }
+  ## Make sure x0 and xhats have the same (non.null names)
+  pcnames <- paste("PC",1:length(x0),sep="")
+  names(x0) <- pcnames; colnames(xhats) <- pcnames
+  
+  myfit <- modFit(f=Xcost, p=as.vector(Ab0), Ts=Ts, xinit=x0, const=const)
+  Ahat <- matrix(coef(myfit), ncol=ncol(X))
+  return(Ahat)
 }
 
 ## wrapper for low-dim (intrinsic) ODE estimation. Input: Ts; xhats
 ## and xhats.init estimated from pcafun(); C.init estimated from
 ## C.init.est(). const=T/F: whether the equation system is homogeneous
 ## or inhomogeneous.
-lowdim.est <- function(Ts, xhats, xhats.curves, method=c("FME", "pda"), lambda=0.01, const=TRUE){
+lowdim.est <- function(Ts, xhats, xhats.curves, method=c("pda", "two.stage", "FME"), lambda=0.01, const=TRUE){
   K <- ncol(xhats); pcnames <- paste("PC",1:K,sep="")
   ## must make sure both xhats and xinit has the same, non-null names
   colnames(xhats) <- pcnames
   mybasis <- xhats.curves[["basis"]]
   mypar <- fdPar(mybasis, 2, lambda=lambda)
 
-  Xcost <- function(pars, xinit){
-    out <- Xfun(pars, Ts, xinit=xinit, const=const)
-    cost <- modCost(model=out, obs=cbind(time=Ts, xhats))
-    return(cost)
+  ## now deal with the inhomogeneous case
+  if (const) {
+    Xt <- fd(cbind("Const"=1, coef(xhats.curves)), mybasis)
+  } else {
+    Xt <- xhats.curves
   }
 
-  if (const) {                           #inhomogeneous
-    ## z is the smoothed xhats plus a constant 1 (for intercept terms)
-    z <- cbind(Const=rep(1,length(Ts)),eval.fd(Ts,xhats.curves))
-    ## estimates of the derivatives
-    z.deriv <- cbind(Const=rep(0,length(Ts)), eval.fd(Ts,deriv(xhats.curves)))
-    ## then use simple linear regression to obtain an approximate C0.
-    ## remember CC is the t(CC) because regression matrix and ODE matrix
-    ## differ by one transpose.
-    CC0 <- t(solve(t(z) %*% z) %*% t(z) %*% z.deriv)
-    ## pars0[1:K] (the first column) are the constant terms. Others form
-    ## the Ahat
-    pars0 <- as.vector(CC0[-1,])
-    ## must make sure both xhats and xinit has the same, non-null names
-    x0 <- z[1,-1]; names(x0) <- colnames(xhats)
-    myfit <- modFit(f=Xcost, p=pars0, xinit=x0)
-    CC <- matrix(coef(myfit), ncol=K+1)
-    Ahat <- CC[,-1]; bvec <- CC[,1]
-    ## don't need the "time" column anymore
-    xhats.fit <- as.matrix(Xfun(pars=coef(myfit), Ts, xinit=x0, const=const)[,-1])
-  } else {                              #homogeneous
-    z <- eval.fd(Ts,xhats.curves)
-    z.deriv <- eval.fd(Ts,deriv(xhats.curves))
-    CC0 <- t(solve(t(z) %*% z) %*% t(z) %*% z.deriv)
-    pars0 <- as.vector(CC0)
-    ## must make sure both xhats and xinit has the same, non-null names
-    x0 <- z[1,]; names(x0) <- colnames(xhats)
-    myfit <- modFit(f=Xcost, p=pars0, xinit=x0)
+  ## Different backends
+  method <- match.arg(method)
+  if (method=="pda"){
+    Ab <- .est.pda(Xt)
+  } else if (method=="two.stage"){
+    Ab <- .est.pda(Xt)
+  } else if (method=="FME") {
+    Ab <- .est.FME(Ts, Xt, xhats, const=const)
+  } else {
+    stop("Only the following low dimensional ODE estimation methods are implemented: pda, two.stage, FME.")
+  }
 
-    Ahat <- matrix(coef(myfit), ncol=K); bvec <- rep(0,K)
-    xhats.fit <- as.matrix(Xfun(pars=coef(myfit), Ts, xinit=x0, const=const)[,-1])
+  ## Disentangle A and b.
+  if (const) {
+    Ahat <- Ab[-1, -1]; bvec <- as.vector(Ab[-1, 1])
+  } else {
+    Ahat <- Ab; bvec <- rep(0,K)
   }
   dimnames(Ahat) <- list(pcnames, pcnames)
   names(bvec) <- pcnames
+
+  ## Now produce some additional information based on A and b.
+  ## don't need the "time" column anymore
+  x0 <- t(eval.fd(Ts[1], xhats.curves))
+  xhats.fit <- as.matrix(ode.fit(Ts, x0, Ahat, bvec)[,-1])
   rownames(xhats.fit) <- Ts
   ## a spline representation of xhats
   xhats.fit.curves <- smooth.basis(Ts, xhats.fit, mypar)[["fd"]]
 
   return(list(Ahat=Ahat, bvec=bvec,
-              deviance=deviance(myfit),
-              iterations=myfit[["iterations"]],
               xhats.fit=xhats.fit,
               xhats.fit.curves=xhats.fit.curves,Ts=Ts))
 }
 
 ## The main function
-PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lowdim.method=c("FME","pda"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
+PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lowdim.method=c("pda", "two.stage", "FME"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
+  pca.method <- match.arg(pca.method); lowdim.method <- match.arg(lowdim.method)
+  ## test if y is a list of subjects or just one subject
+  if (is.list(y)) {                     #many subjects
+    m <- ncol(y[[1]])
+    pca.results <- group.pcafun(y, Ts=Ts, K=K, method=pca.method, center=center, spca.para=spca.para)
+  } else {                              #just one subject
+    m <- ncol(y)
+    pca.results <- pcafun(y, Ts, K=K, lambda=lambda, method=pca.method, center=center, spca.para=spca.para)
+  }
+
+  xhats=pca.results[["xhats"]]; xhats.curves <- pca.results[["xhats.curves"]]
+  intrinsic.system <- lowdim.est(Ts, xhats=xhats, xhats.curves=xhats.curves,
+                                 method=lowdim.method, lambda=lambda, const=const)
+  xhats.fit <- intrinsic.system[["xhats.fit"]]
+  xhats.fit.curves <- intrinsic.system[["xhats.fit.curves"]]
+
+  pcnames <- paste("PC",1:K,sep=""); colnames(xhats.fit) <- pcnames
+  muvec <- matrix(rep(pca.results[["centers"]], m), nrow=length(Ts))
+  y.fit <- xhats.fit %*% t(pca.results[["Bhat"]]) + muvec
+  mucoef <- matrix(rep(coef(pca.results[["meancur"]]), m), ncol=m)
+  mybasis <- xhats.curves[["basis"]]
+  y.fit.curves <- fd(coef(xhats.fit.curves) %*% t(pca.results[["Bhat"]]) + mucoef, mybasis)
+
+  if (is.list(y)) {                     #many subjects
+    rss <- mean(sapply(y, function(yn) sum((yn-y.fit)^2)))/m
+  } else {                              #just one subject
+    rss <- sum((y-y.fit)^2/m)
+  }
+  return (list(Ts=Ts, xhats.fit=xhats.fit,
+               xhats.fit.curves=xhats.fit.curves,
+               y.fit=y.fit, y.fit.curves=y.fit.curves,
+               rss=rss, varprop=pca.results[["varprop"]],
+               Ahat=intrinsic.system[["Ahat"]],
+               bvec=intrinsic.system[["bvec"]],
+               Bhat=pca.results[["Bhat"]], Binv=pca.results[["Binv"]],
+               meancur=pca.results[["meancur"]],
+               centers=pca.results[["centers"]],
+               lambda=lambda,
+               pca.results=pca.results,
+               intrinsic.system=intrinsic.system))
+}
+
+## The main function
+PCODE.weighted <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lowdim.method=c("pda", "two.stage", "FME"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
   pca.method <- match.arg(pca.method); lowdim.method <- match.arg(lowdim.method)
   ## test if y is a list of subjects or just one subject
   if (is.list(y)) {                     #many subjects
@@ -106,9 +181,11 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
   intrinsic.system <- lowdim.est(Ts, xhats=wxhats, xhats.curves=wxhats.curves, method=lowdim.method, lambda=lambda, const=const)
   wAhat <- intrinsic.system[["Ahat"]]; wbvec <- intrinsic.system[["bvec"]]
   Ahat <- diag(1/lambda.root) %*% wAhat %*% diag(lambda.root)
-  bvec <- diag(1/lambda.root) %*% wbvec
+  pcnames <- paste("PC",1:K,sep="")
+  dimnames(Ahat) <- list(pcnames, pcnames)
+  bvec <- as.vector(diag(1/lambda.root) %*% wbvec); names(bvec) <- pcnames
   xhats.fit <- intrinsic.system[["xhats.fit"]] %*% diag(1/lambda.root)
-  pcnames <- paste("PC",1:K,sep=""); colnames(xhats.fit) <- pcnames
+  colnames(xhats.fit) <- pcnames
   ## Done fitting intrinsic system. Now translate these weighted
   ## curves back.
   wxhats.fit.curves <- intrinsic.system[["xhats.fit.curves"]]
@@ -141,13 +218,12 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
 ## between-subject fitting.  Note that y0.new must be a column vector.  As of ver 0.02, this prediction function does not work well with const != 0 case.
 predict.pcode1 <- function(pcode.fit, y0.new, Ts.new=NULL){
   Ts <- pcode.fit[["Ts"]]; centers <- pcode.fit[["centers"]]
+  Ahat <- pcode.fit[["Ahat"]]; bvec <- pcode.fit[["bvec"]]
   if (is.null(Ts.new)){
     Ts.new <- Ts
   }
   xhat0 <- as.vector(pcode.fit[["Binv"]] %*% (y0.new - centers[1]))
-  CC <- cbind(pcode.fit[["bvec"]], pcode.fit[["Ahat"]])
-  pars1 <- as.vector(CC)
-  xhats.fit <- Xfun(pars=pars1, Ts.new, xinit=xhat0, const=TRUE)[,-1]
+  xhats.fit <- as.matrix(ode.fit(Ts.new, xhat0, Ahat, bvec)[,-1])
   y.fit <- sweep(as.matrix(xhats.fit) %*% t(pcode.fit[["Bhat"]]), 1, -centers)
   return (y.fit)
 }
@@ -198,7 +274,7 @@ plot.pcode <- function(y, pcode.result, true.y.curves=NULL, genes=NULL, plot.ori
     mybasis <- y2.fit.curves[["basis"]]
     mypar <- fdPar(mybasis, 2, lambda=lambda)
     y2.fit.orig <- smooth.basis(Ts, y2, mypar)[["fd"]]
-  }  
+  }
 
   if (!is.null(true.y.curves)) true.y2.curves <- true.y.curves[genes]
 
@@ -235,7 +311,7 @@ plot.cv <- function(Ylist, cv.results, true.y.curves=NULL, genes=NULL, subjects=
       mypar <- fdPar(mybasis, 2, lambda=lambda)
       y2.fit.orig <- smooth.basis(Ts, y2, mypar)[["fd"]]
     }
-    
+
     if (!is.null(true.y.curves)) true.y2.curves <- true.y.curves[[ss]][genes]
 
     ## Now plot these curves
