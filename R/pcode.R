@@ -217,16 +217,39 @@ PCODE.weighted <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "s
 
 ## between-subject fitting.  Note that y0.new must be a column vector.  As of ver 0.02, this prediction function does not work well with const != 0 case.
 predict.pcode1 <- function(pcode.fit, y0.new, Ts.new=NULL){
-  Ts <- pcode.fit[["Ts"]]; centers <- pcode.fit[["centers"]]
-  Ahat <- pcode.fit[["Ahat"]]; bvec <- pcode.fit[["bvec"]]
-  if (is.null(Ts.new)){
-    Ts.new <- Ts
+  Ts <- pcode.fit[["Ts"]]; Ahat <- pcode.fit[["Ahat"]]
+  bvec <- pcode.fit[["bvec"]]
+  ## No matter what Ts.new is, center0 is the first center estimated
+  ## from the original system to match y0.new.
+  center0 <- pcode.fit[["centers"]][1]
+  xhat0 <- as.vector(pcode.fit[["Binv"]] %*% (y0.new - center0))
+  if (is.null(Ts.new)){                 #just use the original Ts
+    Ts.new <- Ts; centers <- pcode.fit[["centers"]]
+    xhats.fit <- as.matrix(ode.fit(Ts.new, xhat0, Ahat, bvec)[,-1])
+  } else {                              #estimate the centers for new Ts
+    centers <- eval.fd(Ts.new, pcode.fit[["meancur"]])
+    ## Due to the design of ode(), we need to append Ts1 to Ts.new
+    ## before fitting the curve, and remove it from the results.
+    xhats.fit <- as.matrix(ode.fit(c(Ts[1], Ts.new), xhat0, Ahat, bvec)[-1,-1])
   }
-  xhat0 <- as.vector(pcode.fit[["Binv"]] %*% (y0.new - centers[1]))
-  xhats.fit <- as.matrix(ode.fit(Ts.new, xhat0, Ahat, bvec)[,-1])
   y.fit <- sweep(as.matrix(xhats.fit) %*% t(pcode.fit[["Bhat"]]), 1, -centers)
   return (y.fit)
 }
+
+## individual cross-validation
+CV <- function(Y, Ts, K, center=FALSE, const=FALSE, ...){
+  J <- length(Ts)
+  ## Due to the fact that it is hard to extrapolate, we will drop the
+  ## first time point for now.
+  trainsys <- foreach(j=2:(J-1)) %dopar%{
+    ## Ts=Ts; K=K
+    PCODE(Y[-j,], Ts=Ts[-j], K=K, center=center, const=const, ...)
+  }
+  y.fits <- t(sapply(2:(J-1), function(j) predict.pcode1(trainsys[[j-1]], Y[1,], Ts.new=Ts[j])))
+  rss <- sum((Y[2:(J-1),] - y.fits)^2)/ncol(Y)
+  return(rss)
+}
+
 
 ## wrapper for between subject cross-validation. As of ver 0.02, this function does not work with const=TRUE case.
 CV.group <- function(Ylist, Ts, K, center=FALSE, const=FALSE, ...){
@@ -262,7 +285,7 @@ plot.pcode <- function(y, pcode.result, true.y.curves=NULL, genes=NULL, plot.ori
   ## in the genes.
   if (is.null(genes)) genes=seq(min(ngenes,12))
 
-  y2 <- y[,genes]; y2.fit.curves <- pcode.result[["y.fit.curves"]][genes]
+  y2 <- as.matrix(y[,genes]); y2.fit.curves <- pcode.result[["y.fit.curves"]][genes]
   if (is.null(colnames(y2))) {
     ynames <- paste("y", genes, sep="")
   } else {
@@ -287,7 +310,7 @@ plot.pcode <- function(y, pcode.result, true.y.curves=NULL, genes=NULL, plot.ori
   }
 }
 
-## another wrapper for CV results.
+## another wrapper for group CV results.
 plot.cv <- function(Ylist, cv.results, true.y.curves=NULL, genes=NULL, subjects=NULL, plot.orig.curves=TRUE, ...){
   N <- length(Ylist); ngenes <- ncol(Ylist[[1]]); Ts <- cv.results[["Ts"]]
   ## If not specified, use the first three subjects.
@@ -297,7 +320,7 @@ plot.cv <- function(Ylist, cv.results, true.y.curves=NULL, genes=NULL, subjects=
   if (is.null(genes)) genes=seq(min(ngenes,4))
 
   for (ss in subjects){
-    y2 <- Ylist[[ss]][,genes]
+    y2 <- as.matrix(Ylist[[ss]][,genes])
     y2.fit.curves <- cv.results[["y.fit.curves.list"]][[ss]][genes]
     if (is.null(colnames(y2))) {
       ynames <- paste("y", genes, sep="")
