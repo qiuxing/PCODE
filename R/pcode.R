@@ -16,7 +16,7 @@ ode.fit <- function(Ts, xinit, A, b=NULL){
 }
 
 ## The two-stage backend
-.est.2stage <- function(Xt){
+.est.2stage <- function(Ts, Xt){
   X <- eval.fd(Ts, Xt); X.deriv <- eval.fd(Ts,deriv(Xt))
   Ahat <- t(X.deriv) %*% X %*% solve(t(X) %*% X)
   return(Ahat)
@@ -46,7 +46,7 @@ ode.fit <- function(Ts, xinit, A, b=NULL){
   }
 
   ## use 2-stage method to estimate the initial values
-  Ab0 <- .est.2stage(Xt)
+  Ab0 <- .est.2stage(Ts,Xt)
 
   X <- eval.fd(Ts, Xt)
   if (const) {                           #inhomogeneous
@@ -86,7 +86,7 @@ lowdim.est <- function(Ts, xhats, xhats.curves, method=c("pda", "two.stage", "FM
   if (method=="pda"){
     Ab <- .est.pda(Xt)
   } else if (method=="two.stage"){
-    Ab <- .est.pda(Xt)
+    Ab <- .est.2stage(Ts, Xt)
   } else if (method=="FME") {
     Ab <- .est.FME(Ts, Xt, xhats, const=const)
   } else {
