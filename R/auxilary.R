@@ -1,3 +1,26 @@
+## A wrapper to select smoothing parameter automatically
+autolambda <- function(Ts, Y, loglams=seq(-2,4,.5), subset=TRUE, nsubset=50){
+  K <- length(loglams); lambdas <- 10^loglams
+  ngenes <- ncol(Y)
+  if (subset && ngenes>nsubset) {
+    Ysub <- Y[,sample(ngenes,nsubset)]
+  } else {
+    Ysub <- Y
+  }
+  mybasis <- create.bspline.basis(range(Ts), length(Ts)+4-2, 4, Ts)
+  gcvs <- rep(0,K); dfs <- rep(0,K)
+  for (k in 1:K){
+    par.k <- fdPar(mybasis, 2, lambdas[k])
+    curves.k <- smooth.basis(Ts, Ysub, par.k)
+    gcvs[k] <- mean(curves.k[["gcv"]])
+    dfs[k] <- curves.k[["df"]]
+  }
+  kstar <- which.min(gcvs)
+  return(list(gcvs=gcvs, dfs=dfs, lambdas=lambdas,
+              kstar=kstar, df.star=dfs[kstar],
+              lambda.star=lambdas[kstar]))
+}
+
 ## useful functions for high-dim ODE project
 projected.fnorm <- function(V, W){
   ## projection Frobenius norm.
@@ -183,7 +206,6 @@ reprojection <- function(Y2, PCA1, Bhat.only=FALSE){
     return(PCA1)
   }
 }
-
 
 ## This function takes B and A, produces a sparse representation of C=BAB-
 sparseC <- function(A, B, prior=NULL){
