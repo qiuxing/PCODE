@@ -38,7 +38,7 @@ projected.fnorm <- function(V, W){
   } else {
     stop("Only the following PCA methods are implemented: fpca, pca, spca.")
   }
-  diffmat <- Qv %*% t(Qv) - Qw %*% t(Qw)
+  diffmat <- as.matrix(Qv %*% t(Qv) - Qw %*% t(Qw))
   return(norm(diffmat, "F")/sqrt(2))
 }
 
@@ -87,7 +87,7 @@ fdist2 <- function(pcode1, pcode2){
   qr1 <- qr(B1); Q1 <- qr.Q(qr1); R1 <- qr.R(qr1)
   qr2 <- qr(B2); Q2 <- qr.Q(qr2); R2 <- qr.R(qr2)
   Q12 <- t(Q1) %*% Q2
-  diffmat <- R1%*%C1%*% solve(R1) - Q12%*% R2%*% C2 %*% solve(R2) %*% t(Q12)
+  diffmat <- as.matrix(R1%*%C1%*% solve(R1) - Q12%*% R2%*% C2 %*% solve(R2) %*% t(Q12))
   return(norm(diffmat, "F")^2)
 }
 
