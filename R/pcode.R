@@ -121,7 +121,7 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
   ## test if y is a list of subjects or just one subject
   if (is.list(y)) {                     #many subjects
     m <- ncol(y[[1]])
-    pca.results <- group.pcafun(y, Ts=Ts, K=K, method=pca.method, center=center, spca.para=spca.para)
+    pca.results <- group.pcafun(y, Ts=Ts, K=K, lambda=lambda, method=pca.method, center=center, spca.para=spca.para)
   } else {                              #just one subject
     m <- ncol(y)
     pca.results <- pcafun(y, Ts, K=K, lambda=lambda, method=pca.method, center=center, spca.para=spca.para)
@@ -306,7 +306,7 @@ plot.pcode <- function(y, pcode.result, true.y.curves=NULL, genes=NULL, plot.ori
     plot(Ts, y2[,i], ylab=ynames[i], xlab="Time", ...)
     lines(y2.fit.curves[i])
     if (plot.orig.curves) lines(y2.fit.orig[i], col="grey")
-    if (!is.null(true.y.curves)) lines(y2.fit.orig[i], col="blue")
+    if (!is.null(true.y.curves)) lines(true.y2.curves[i], col="blue")
   }
 }
 
@@ -342,7 +342,7 @@ plot.cv <- function(Ylist, cv.results, true.y.curves=NULL, genes=NULL, subjects=
       plot(Ts, y2[,i], ylab=ynames[i], xlab="Time", main=ss, ...)
       lines(y2.fit.curves[i])
       if (plot.orig.curves) lines(y2.fit.orig[i], col="grey")
-      if (!is.null(true.y.curves)) lines(y2.fit.orig[i], col="blue")
+      if (!is.null(true.y.curves)) lines(true.y2.curves[i], col="blue")
     }
   }
 }
