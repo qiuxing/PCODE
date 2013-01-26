@@ -30,6 +30,13 @@ ode.fit <- function(Ts, xinit, A, b=NULL){
   return(Ahat)
 }
 
+## Leqin's method
+.est.pelos <- function(Ts, Xt, xhats, const) {
+  ## use 2-stage method to estimate the initial values
+  Ab0 <- .est.2stage(Ts,Xt)
+  
+}
+
 ## This is a full least-square method
 .est.FME <- function(Ts, Xt, xhats, const) {
   Xcost <- function(pars, Ts, xinit, const){
