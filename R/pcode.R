@@ -30,11 +30,19 @@ ode.fit <- function(Ts, xinit, A, b=NULL){
   return(Ahat)
 }
 
-## Leqin's method
-.est.pelos <- function(Ts, Xt, xhats, const) {
-  ## use 2-stage method to estimate the initial values
-  Ab0 <- .est.2stage(Ts,Xt)
-  
+## Leqin's method.
+.est.pelos <- function(Ts, Xt, xhats,  ...) {
+  ## use 2-stage method to estimate the initial values,   
+  A0 <- .est.2stage(Ts,Xt); K <- nrow(A0)
+  A0 <- cbind(i=rep(1:K,K), j=rep(1:K,each=K), x=as.vector(A0))
+  ## initial values
+  X0 <- as.vector(eval.fd(Ts[1], Xt))
+  ## transform xhats into the sparse format
+  J <- nrow(xhats); K <- ncol(xhats)
+  OBS <- cbind(var=rep(1:K, each=J),Time=rep(Ts,K), value=as.vector(xhats), weight=rep(1/K, K*J))
+  myfit <- pelos(OBS, A0, X0, Nprint=0, ...)
+  Ahat <- myfit[["coefficient.matrix"]]
+  return(Ahat)
 }
 
 ## This is a full least-square method
@@ -74,7 +82,7 @@ ode.fit <- function(Ts, xinit, A, b=NULL){
 ## and xhats.init estimated from pcafun(); C.init estimated from
 ## C.init.est(). const=T/F: whether the equation system is homogeneous
 ## or inhomogeneous.
-lowdim.est <- function(Ts, xhats, xhats.curves, method=c("pda", "two.stage", "FME"), lambda=0.01, const=TRUE){
+lowdim.est <- function(Ts, xhats, xhats.curves, method=c("pelos", "pda", "two.stage", "FME"), lambda=0.01, const=TRUE, ...){
   K <- ncol(xhats); pcnames <- paste("PC",1:K,sep="")
   ## must make sure both xhats and xinit has the same, non-null names
   colnames(xhats) <- pcnames
@@ -90,7 +98,9 @@ lowdim.est <- function(Ts, xhats, xhats.curves, method=c("pda", "two.stage", "FM
 
   ## Different backends
   method <- match.arg(method)
-  if (method=="pda"){
+  if (method=="pelos"){
+    Ab <- .est.pelos(Ts, Xt, xhats)
+  } else if (method=="pda"){
     Ab <- .est.pda(Xt)
   } else if (method=="two.stage"){
     Ab <- .est.2stage(Ts, Xt)
@@ -123,7 +133,7 @@ lowdim.est <- function(Ts, xhats, xhats.curves, method=c("pda", "two.stage", "FM
 }
 
 ## The main function
-PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lowdim.method=c("pda", "two.stage", "FME"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
+PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lowdim.method=c("pelos", "pda", "two.stage", "FME"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
   pca.method <- match.arg(pca.method); lowdim.method <- match.arg(lowdim.method)
   ## test if y is a list of subjects or just one subject
   if (is.list(y)) {                     #many subjects
@@ -167,7 +177,7 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
 }
 
 ## The main function
-PCODE.weighted <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lowdim.method=c("pda", "two.stage", "FME"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
+PCODE.weighted <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lowdim.method=c("pelos", "pda", "two.stage", "FME"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
   pca.method <- match.arg(pca.method); lowdim.method <- match.arg(lowdim.method)
   ## test if y is a list of subjects or just one subject
   if (is.list(y)) {                     #many subjects
