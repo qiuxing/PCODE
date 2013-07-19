@@ -1,3 +1,5 @@
+## 6/24/2013.  TODO: per-trajectory CV
+
 ## 10/18/2012. Make a package instead of a flat R file.
 
 ## wrapper for linear (homogeneous or inhomogeneous) ODE
@@ -15,100 +17,38 @@ ode.fit <- function(Ts, xinit, A, b=NULL){
   as.data.frame(out)
 }
 
-## The two-stage backend
-.est.2stage <- function(Ts, Xt){
-  X <- eval.fd(Ts, Xt); X.deriv <- eval.fd(Ts,deriv(Xt))
-  Ahat <- t(X.deriv) %*% X %*% solve(t(X) %*% X)
-  return(Ahat)
-}
-
-## The unweighted PDA backend.
-.est.pda <- function(Xt) {
-  Sigma.xx <- inprod(Xt, Xt)
-  Sigma.xderivx <- inprod(deriv(Xt), Xt)
-  Ahat <- Sigma.xderivx %*% solve(Sigma.xx)
-  return(Ahat)
-}
-
-## Leqin's method.
-.est.pelos <- function(Ts, Xt, xhats,  ...) {
-  ## use 2-stage method to estimate the initial values,   
-  A0 <- .est.2stage(Ts,Xt); K <- nrow(A0)
-  A0 <- cbind(i=rep(1:K,K), j=rep(1:K,each=K), x=as.vector(A0))
-  ## initial values
-  X0 <- as.vector(eval.fd(Ts[1], Xt))
-  ## transform xhats into the sparse format
-  J <- nrow(xhats); K <- ncol(xhats)
-  OBS <- cbind(var=rep(1:K, each=J),Time=rep(Ts,K), value=as.vector(xhats), weight=rep(1/K, K*J))
-  myfit <- pelos(OBS, A0, X0, Nprint=0, ...)
-  Ahat <- myfit[["coefficient.matrix"]]
-  return(Ahat)
-}
-
-## This is a full least-square method
-.est.FME <- function(Ts, Xt, xhats, const) {
-  Xcost <- function(pars, Ts, xinit, const){
-    if (const) {
-      Ab <- matrix(pars, ncol=length(xinit)+1)
-      A <- Ab[-1,-1]; b <- Ab[-1,1]
-      out <- ode.fit(Ts, xinit, A, b)
-    } else {
-      A <- matrix(pars, ncol=length(xinit))
-      out <- ode.fit(Ts, xinit, A)
-    }
-    cost <- modCost(model=out, obs=cbind(time=Ts, xhats))
-    return(cost)
-  }
-
-  ## use 2-stage method to estimate the initial values
-  Ab0 <- .est.2stage(Ts,Xt)
-
-  X <- eval.fd(Ts, Xt)
-  if (const) {                           #inhomogeneous
-    x0 <- X[1,-1]
-  } else {                              #homogeneous
-    x0 <- X[1,]
-  }
-  ## Make sure x0 and xhats have the same (non.null names)
-  pcnames <- paste("PC",1:length(x0),sep="")
-  names(x0) <- pcnames; colnames(xhats) <- pcnames
-  
-  myfit <- modFit(f=Xcost, p=as.vector(Ab0), Ts=Ts, xinit=x0, const=const)
-  Ahat <- matrix(coef(myfit), ncol=ncol(X))
-  return(Ahat)
-}
-
 ## wrapper for low-dim (intrinsic) ODE estimation. Input: Ts; xhats
 ## and xhats.init estimated from pcafun(); C.init estimated from
 ## C.init.est(). const=T/F: whether the equation system is homogeneous
 ## or inhomogeneous.
-lowdim.est <- function(Ts, xhats, xhats.curves, method=c("pelos", "pda", "two.stage", "FME"), lambda=0.01, const=TRUE, ...){
+lowdim.est <- function(Ts, xhats, xhats.curves, weights=NULL, est.method=c("pda", "two.stage"), stab.method=c("eigen-bound", "random", "zero", "none"), refine.method=c("pelos", "none"), lambda=0.01, const=TRUE, ...){
   K <- ncol(xhats); pcnames <- paste("PC",1:K,sep="")
   ## must make sure both xhats and xinit has the same, non-null names
   colnames(xhats) <- pcnames
   mybasis <- xhats.curves[["basis"]]
   mypar <- fdPar(mybasis, 2, lambda=lambda)
+  ## normalize weights
+  if (!is.null(weights)) weights <- weights/sum(weights)
 
   ## now deal with the inhomogeneous case
   if (const) {
     Xt <- fd(cbind("Const"=1, coef(xhats.curves)), mybasis)
+    xhats <- cbind(1, xhats)
+    ## pad weights with 1/(K+1) for now
+    if (!is.null(weights)) weights <- c(1/(K+1), K/(K+1)*weights)
   } else {
     Xt <- xhats.curves
   }
 
   ## Different backends
-  method <- match.arg(method)
-  if (method=="pelos"){
-    Ab <- .est.pelos(Ts, Xt, xhats)
-  } else if (method=="pda"){
-    Ab <- .est.pda(Xt)
-  } else if (method=="two.stage"){
-    Ab <- .est.2stage(Ts, Xt)
-  } else if (method=="FME") {
-    Ab <- .est.FME(Ts, Xt, xhats, const=const)
-  } else {
-    stop("Only the following low dimensional ODE estimation methods are implemented: pda, two.stage, FME.")
-  }
+  est.method <- match.arg(est.method)
+  stab.method <- match.arg(stab.method)
+  refine.method <- match.arg(refine.method)
+
+  Ab1 <- .est(Ts, Xt, method=est.method)
+  Ab2 <- .stabilize(Ab1, method=stab.method)
+  RF <- .refine(Ts, Xt, xhats, Ab2, method=refine.method, weights=weights)
+  Ab <- RF[["Ahat"]]; x0 <- RF[["x0"]]
 
   ## Disentangle A and b.
   if (const) {
@@ -121,7 +61,6 @@ lowdim.est <- function(Ts, xhats, xhats.curves, method=c("pelos", "pda", "two.st
 
   ## Now produce some additional information based on A and b.
   ## don't need the "time" column anymore
-  x0 <- t(eval.fd(Ts[1], xhats.curves))
   xhats.fit <- as.matrix(ode.fit(Ts, x0, Ahat, bvec)[,-1])
   rownames(xhats.fit) <- Ts
   ## a spline representation of xhats
@@ -133,30 +72,49 @@ lowdim.est <- function(Ts, xhats, xhats.curves, method=c("pelos", "pda", "two.st
 }
 
 ## The main function
-PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lowdim.method=c("pelos", "pda", "two.stage", "FME"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
-  pca.method <- match.arg(pca.method); lowdim.method <- match.arg(lowdim.method)
+PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), weight=c("varprop", "none"), est.method=c("pda", "two.stage"), stab.method=c("eigen-bound", "random", "zero", "none"), refine.method=c("pelos", "none"), backfit.method=c("lasso", "gen.inv"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
+  pca.method <- match.arg(pca.method)
+  weight <- match.arg(weight)
+  est.method <- match.arg(est.method)
+  stab.method <- match.arg(stab.method)
+  refine.method <- match.arg(refine.method)
+  backfit.method <- match.arg(backfit.method)
   ## test if y is a list of subjects or just one subject
   if (is.list(y)) {                     #many subjects
-    m <- ncol(y[[1]])
-    pca.results <- group.pcafun(y, Ts=Ts, K=K, lambda=lambda, method=pca.method, center=center, spca.para=spca.para)
+      m <- ncol(y[[1]])
+      pca.results <- group.pcafun(y, Ts=Ts, K=K, lambda=lambda, method=pca.method, center=center, spca.para=spca.para)
   } else {                              #just one subject
-    m <- ncol(y)
-    pca.results <- pcafun(y, Ts, K=K, lambda=lambda, method=pca.method, center=center, spca.para=spca.para)
+      m <- ncol(y)
+      pca.results <- pcafun(y, Ts, K=K, lambda=lambda, method=pca.method, center=center, spca.para=spca.para)
+  }
+  
+  xhats=pca.results[["xhats"]]
+  Bhat <- pca.results[["Bhat"]]; xhats.curves <- pca.results[["xhats.curves"]]
+  if (weight=="varprop") {
+      weights <- pca.results[["varprop"]]
+  } else if (weight=="none"){
+      weights <- NULL
+  } else {
+      stop("Supported weighting methods are varprop or none.")
   }
 
-  xhats=pca.results[["xhats"]]; xhats.curves <- pca.results[["xhats.curves"]]
-  intrinsic.system <- lowdim.est(Ts, xhats=xhats, xhats.curves=xhats.curves,
-                                 method=lowdim.method, lambda=lambda, const=const)
+  intrinsic.system <- lowdim.est(Ts, xhats=xhats, xhats.curves=xhats.curves, weights=weights,
+                                 est.method=est.method, stab.method=stab.method,
+                                 refine.method=refine.method, lambda=lambda, const=const)
   xhats.fit <- intrinsic.system[["xhats.fit"]]
   xhats.fit.curves <- intrinsic.system[["xhats.fit.curves"]]
 
   pcnames <- paste("PC",1:K,sep=""); colnames(xhats.fit) <- pcnames
   muvec <- matrix(rep(pca.results[["centers"]], m), nrow=length(Ts))
-  y.fit <- xhats.fit %*% t(pca.results[["Bhat"]]) + muvec
+  y.fit <- xhats.fit %*% t(Bhat) + muvec
   mucoef <- matrix(rep(coef(pca.results[["meancur"]]), m), ncol=m)
   mybasis <- xhats.curves[["basis"]]
-  y.fit.curves <- fd(coef(xhats.fit.curves) %*% t(pca.results[["Bhat"]]) + mucoef, mybasis)
+  y.fit.curves <- fd(coef(xhats.fit.curves) %*% t(Bhat) + mucoef, mybasis)
 
+  ## backfit the original eqn system
+  Theta <- .backfit(Bhat, Ahat, method=backfit.method)
+
+  ## Compute RSS
   if (is.list(y)) {                     #many subjects
     rss <- mean(sapply(y, function(yn) sum((yn-y.fit)^2)))/m
   } else {                              #just one subject
@@ -168,68 +126,12 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lo
                rss=rss, varprop=pca.results[["varprop"]],
                Ahat=intrinsic.system[["Ahat"]],
                bvec=intrinsic.system[["bvec"]],
-               Bhat=pca.results[["Bhat"]], Binv=pca.results[["Binv"]],
+               Bhat=Bhat, Binv=pca.results[["Binv"]],
                meancur=pca.results[["meancur"]],
                centers=pca.results[["centers"]],
                lambda=lambda,
                pca.results=pca.results,
                intrinsic.system=intrinsic.system))
-}
-
-## The main function
-PCODE.weighted <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), lowdim.method=c("pelos", "pda", "two.stage", "FME"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
-  pca.method <- match.arg(pca.method); lowdim.method <- match.arg(lowdim.method)
-  ## test if y is a list of subjects or just one subject
-  if (is.list(y)) {                     #many subjects
-    m <- ncol(y[[1]])
-    pca.results <- group.pcafun(y, Ts=Ts, K=K, method=pca.method, center=center, spca.para=spca.para)
-  } else {                              #just one subject
-    m <- ncol(y)
-    pca.results <- pcafun(y, Ts, K=K, lambda=lambda, method=pca.method, center=center, spca.para=spca.para)
-  }
-  ## now use square root of varprop to weight xhats, xhats.curves
-  lambda.root <- sqrt(pca.results[["varprop"]])
-  wxhats <- pca.results[["xhats"]] %*% diag(lambda.root)
-  xhats.curves <- pca.results[["xhats.curves"]]
-  mybasis <- xhats.curves[["basis"]]
-  ## below starts the fitting of the intrinsic system.  Note that we
-  ## use sqrt(varprop) to weight xhats and xhats.curves.
-  wxhats.curves <- fd(coef(xhats.curves) %*% diag(lambda.root), mybasis)
-  intrinsic.system <- lowdim.est(Ts, xhats=wxhats, xhats.curves=wxhats.curves, method=lowdim.method, lambda=lambda, const=const)
-  wAhat <- intrinsic.system[["Ahat"]]; wbvec <- intrinsic.system[["bvec"]]
-  Ahat <- diag(1/lambda.root) %*% wAhat %*% diag(lambda.root)
-  pcnames <- paste("PC",1:K,sep="")
-  dimnames(Ahat) <- list(pcnames, pcnames)
-  bvec <- as.vector(diag(1/lambda.root) %*% wbvec); names(bvec) <- pcnames
-  xhats.fit <- intrinsic.system[["xhats.fit"]] %*% diag(1/lambda.root)
-  colnames(xhats.fit) <- pcnames
-  ## Done fitting intrinsic system. Now translate these weighted
-  ## curves back.
-  wxhats.fit.curves <- intrinsic.system[["xhats.fit.curves"]]
-  xcoefs <- coef(wxhats.fit.curves) %*% diag(1/lambda.root)
-  colnames(xcoefs) <- pcnames
-  xhats.fit.curves <- fd(xcoefs,mybasis)
-  muvec <- matrix(rep(pca.results[["centers"]], m), nrow=length(Ts))
-  y.fit <- xhats.fit %*% t(pca.results[["Bhat"]]) + muvec
-  mucoef <- matrix(rep(coef(pca.results[["meancur"]]), m), ncol=m)
-  y.fit.curves <- fd(coef(xhats.fit.curves) %*% t(pca.results[["Bhat"]]) + mucoef, mybasis)
-
-  if (is.list(y)) {                     #many subjects
-    rss <- mean(sapply(y, function(yn) sum((yn-y.fit)^2)))/m
-  } else {                              #just one subject
-    rss <- sum((y-y.fit)^2/m)
-  }
-  return (list(Ts=Ts, xhats.fit=xhats.fit,
-               xhats.fit.curves=xhats.fit.curves,
-               y.fit=y.fit, y.fit.curves=y.fit.curves,
-               rss=rss, varprop=pca.results[["varprop"]],
-               Ahat=Ahat, bvec=bvec,
-               Bhat=pca.results[["Bhat"]], Binv=pca.results[["Binv"]],
-               meancur=pca.results[["meancur"]],
-               centers=pca.results[["centers"]],
-               lambda=lambda,
-               pca.results=pca.results,
-               weighted.intrinsic.system=intrinsic.system))
 }
 
 ## between-subject fitting.  Note that y0.new must be a column vector.  As of ver 0.02, this prediction function does not work well with const != 0 case.

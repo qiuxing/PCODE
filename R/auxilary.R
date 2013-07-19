@@ -228,17 +228,28 @@ sparseC <- function(A, B, prior=NULL){
   return(Cmat)
 }
 
+sortequiv <- function(rmat){
+    ## This function takes a nx2 matrix of equivalence, returns its
+    ## disconnected components.
+    nodes <- unique(as.vector(rmat))
+    if (nrow(rmat)==0){                 #empty matrix
+        return (NULL)
+    } else {
+        equivs <- lapply(1:nrow(rmat), function(i) rmat[i,])
+        if (length(equivs) >1){
+            for (i in 1:(length(equivs)-1)){
+                for (j in (i+1):length(equivs)){
+                    if (any(equivs[[j]] %in% equivs[[i]])) {
+                        equivs[[i]] <- unique(c(equivs[[i]], equivs[[j]]))
+                        equivs[[j]] <- "null"
+                    } 
+                }
+            }
+        } 
+        ## now remove all the "null" elements
+        equivs <- equivs[equivs != "null"]
+    }
+    return (equivs)
+}
 
-## karcher.mean <- function(Ws) {
-##   ## the karcher mean/centroid on Gr(m,n)
-##   N <- length(Ws)                       #sample size
-##   objfun <- function(V){
-##     sum(sapply(1:N, function(i) projected.fnorm(V, Ws[[i]])^2))
-##   }
-##   ...
-## }
 
-
-## geodesic.norm <- function(V, W){
-##   ## The geodesic distance on SOn
-## }
