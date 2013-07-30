@@ -94,7 +94,7 @@
         Y <- t(A) %*% t(Bhat)
         Theta <- matrix(0, nrow=m, ncol=m)
         for (i in 1:m){
-            larscoefs <- coef(lars(x=t(Bhat), y=Y[,i], intercept=FALSE, Gram=FALSE, ...))
+            larscoefs <- coef(lars(x=t(Bhat), y=Y[,i], intercept=FALSE, ...))
             Theta[i,] <- larscoefs[nrow(larscoefs),]
         }
     } else if (method=="gen.inv"){
