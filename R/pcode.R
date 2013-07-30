@@ -103,6 +103,7 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), we
                                  refine.method=refine.method, lambda=lambda, const=const)
   xhats.fit <- intrinsic.system[["xhats.fit"]]
   xhats.fit.curves <- intrinsic.system[["xhats.fit.curves"]]
+  Ahat <- intrinsic.system[["Ahat"]]
 
   pcnames <- paste("PC",1:K,sep=""); colnames(xhats.fit) <- pcnames
   muvec <- matrix(rep(pca.results[["centers"]], m), nrow=length(Ts))
@@ -124,9 +125,10 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), we
                xhats.fit.curves=xhats.fit.curves,
                y.fit=y.fit, y.fit.curves=y.fit.curves,
                rss=rss, varprop=pca.results[["varprop"]],
-               Ahat=intrinsic.system[["Ahat"]],
+               Ahat=Ahat,
                bvec=intrinsic.system[["bvec"]],
                Bhat=Bhat, Binv=pca.results[["Binv"]],
+               Theta=Theta,
                meancur=pca.results[["meancur"]],
                centers=pca.results[["centers"]],
                lambda=lambda,
@@ -156,13 +158,13 @@ predict.pcode1 <- function(pcode.fit, y0.new, Ts.new=NULL){
 }
 
 ## individual cross-validation
-CV <- function(Y, Ts, K, center=FALSE, const=FALSE, ...){
+CV <- function(Y, Ts, K, center=FALSE, const=FALSE, refine.method="none", ...){
   J <- length(Ts)
   ## Due to the fact that it is hard to extrapolate, we will drop the
   ## first time point for now.
   trainsys <- foreach(j=2:(J-1)) %dopar%{
     ## Ts=Ts; K=K
-    PCODE(Y[-j,], Ts=Ts[-j], K=K, center=center, const=const, ...)
+    PCODE(Y[-j,], Ts=Ts[-j], K=K, center=center, const=const, refine.method=refine.method, ...)
   }
   y.fits <- t(sapply(2:(J-1), function(j) predict.pcode1(trainsys[[j-1]], Y[1,], Ts.new=Ts[j])))
   rss <- sum((Y[2:(J-1),] - y.fits)^2)/ncol(Y)

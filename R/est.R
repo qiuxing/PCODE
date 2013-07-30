@@ -56,7 +56,7 @@
 }
 
 ## refinement methods. A0 is typically the result of .stabilize(.est(...))
-.refine <- function(Ts, Xt, xhats, A0, method="pelos", weights=NULL, ...) {
+.refine <- function(Ts, Xt, xhats, A0, method="pelos", weights=NULL, verbose=FALSE, ...) {
     if (method=="pelos"){
         ## Leqin's method.  
         J <- nrow(xhats); K <- nrow(A0)
@@ -71,7 +71,11 @@
             weights <- rep(weights/sum(weights), each=J)
         }
         OBS <- cbind(value=as.vector(xhats), var=rep(1:K, each=J),Time=rep(Ts,K), weight=weights)
-        myfit <- pelos(OBS, A0, x0, num_print=0, ...)
+        if (verbose) {
+            myfit <- pelos(OBS, A0, x0, num_print=0, ...)
+        } else {
+            capture.output(myfit <- pelos(OBS, A0, x0, num_print=0, ...))
+        }
         Ahat <- matrix(myfit[["coefficient"]], nrow=K)
         x0 <- myfit[["initial_value"]]
     } else if (method=="none"){
@@ -90,7 +94,7 @@
         Y <- t(A) %*% t(Bhat)
         Theta <- matrix(0, nrow=m, ncol=m)
         for (i in 1:m){
-            larscoefs <- coef(lars(x=t(Bhat), y=Y[,i], intercept=FALSE, ...))
+            larscoefs <- coef(lars(x=t(Bhat), y=Y[,i], intercept=FALSE, Gram=FALSE, ...))
             Theta[i,] <- larscoefs[nrow(larscoefs),]
         }
     } else if (method=="gen.inv"){
