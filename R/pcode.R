@@ -52,7 +52,7 @@ lowdim.est <- function(Ts, xhats, xhats.curves, weights=NULL, est.method=c("pda"
 
   ## Disentangle A and b.
   if (const) {
-    Ahat <- Ab[-1, -1]; bvec <- as.vector(Ab[-1, 1])
+    Ahat <- Ab[-1, -1]; bvec <- as.vector(Ab[-1, 1]); x0 <- x0[-1]
   } else {
     Ahat <- Ab; bvec <- rep(0,K)
   }
