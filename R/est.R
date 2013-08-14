@@ -1,7 +1,7 @@
 ## The two-stage backends
 
 .est <- function(Ts, Xt, method="pda"){
-    if (method=="2stage"){
+    if (method=="two.stage"){
         X <- eval.fd(Ts, Xt); X.deriv <- eval.fd(Ts,deriv(Xt))
         Ahat <- t(X.deriv) %*% X %*% solve(t(X) %*% X)
     } else if (method=="pda"){
@@ -60,8 +60,7 @@
     if (method=="pelos"){
         ## Leqin's method.  
         J <- nrow(xhats); K <- nrow(A0)
-        ## A0 <- cbind(i=rep(1:K,K), j=rep(1:K,each=K), x=as.vector(A0))
-        A0 <- cbind(x=as.vector(A0), 1:length(as.vector(A0)))
+        ## A0 <- cbind(x=as.vector(A0), 1:length(as.vector(A0)))
         ## initial values
         x0 <- as.vector(eval.fd(Ts[1], Xt))
         ## transform xhats into the sparse format
@@ -70,13 +69,17 @@
         } else {
             weights <- rep(weights/sum(weights), each=J)
         }
-        OBS <- cbind(value=as.vector(xhats), var=rep(1:K, each=J),Time=rep(Ts,K), weight=weights)
+        ## OBS <- cbind(value=as.vector(xhats), var=rep(1:K, each=J),Time=rep(Ts,K), weight=weights)
+        OBS <- rbind(Ts, t(xhats))
         if (verbose) {
-            myfit <- pelos(OBS, A0, x0, num_print=0, ...)
+            myfit <- pelos(OBS, structure=matrix(TRUE, K, K),
+                           coefficient=A0, initial_value=x0,
+                           num_print=8, ...)
         } else {
-            capture.output(myfit <- pelos(OBS, A0, x0, num_print=0, ...))
+            capture.output(myfit <- pelos(OBS, structure=matrix(TRUE, K, K), coefficient=A0, initial_value=x0, num_print=0, ...))
         }
-        Ahat <- matrix(myfit[["coefficient"]], nrow=K)
+        ## Ahat <- matrix(myfit[["coefficient"]], nrow=K)
+        Ahat <- myfit[["coefficient"]]
         x0 <- myfit[["initial_value"]]
     } else if (method=="none"){
         Ahat <- A0
