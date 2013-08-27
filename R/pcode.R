@@ -21,7 +21,7 @@ ode.fit <- function(Ts, xinit, A, b=NULL){
 ## and xhats.init estimated from pcafun(); C.init estimated from
 ## C.init.est(). const=T/F: whether the equation system is homogeneous
 ## or inhomogeneous.
-lowdim.est <- function(Ts, xhats, xhats.curves, weights=NULL, est.method=c("pda", "two.stage"), stab.method=c("eigen-bound", "random", "zero", "none"), refine.method=c("pelos", "none"), lambda=0.01, const=TRUE, ...){
+lowdim.est <- function(Ts, xhats, xhats.curves, weights=NULL, est.method=c("pda", "two.stage"), stab.method=c("eigen-bound", "eigen-bound2", "random", "zero", "none"), refine.method=c("pelos", "none"), lambda=0.01, const=TRUE, verbose=FALSE, ...){
   K <- ncol(xhats); pcnames <- paste("PC",1:K,sep="")
   ## must make sure both xhats and xinit has the same, non-null names
   colnames(xhats) <- pcnames
@@ -46,8 +46,8 @@ lowdim.est <- function(Ts, xhats, xhats.curves, weights=NULL, est.method=c("pda"
   refine.method <- match.arg(refine.method)
 
   Ab1 <- .est(Ts, Xt, method=est.method)
-  Ab2 <- .stabilize(Ab1, method=stab.method)
-  RF <- .refine(Ts, Xt, xhats, Ab2, method=refine.method, weights=weights)
+  Ab2 <- .stabilize(Ab1, Ts, method=stab.method)
+  RF <- .refine(Ts, Xt, xhats, Ab2, method=refine.method, weights=weights, verbose=verbose)
   Ab <- RF[["Ahat"]]; x0 <- RF[["x0"]]
 
   ## Disentangle A and b.
@@ -72,7 +72,7 @@ lowdim.est <- function(Ts, xhats, xhats.curves, weights=NULL, est.method=c("pda"
 }
 
 ## The main function
-PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), weight=c("varprop", "none"), est.method=c("pda", "two.stage"), stab.method=c("eigen-bound", "random", "zero", "none"), refine.method=c("pelos", "none"), backfit.method=c("lasso", "gen.inv"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE){
+PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), weight=c("varprop", "none"), est.method=c("pda", "two.stage"), stab.method=c("eigen-bound", "eigen-bound2", "random", "zero", "none"), refine.method=c("pelos", "none"), backfit.method=c("lasso", "gen.inv"), center=FALSE, spca.para=2^seq(K)/2, const=TRUE, verbose=FALSE){
   pca.method <- match.arg(pca.method)
   weight <- match.arg(weight)
   est.method <- match.arg(est.method)
@@ -100,7 +100,7 @@ PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), we
 
   intrinsic.system <- lowdim.est(Ts, xhats=xhats, xhats.curves=xhats.curves, weights=weights,
                                  est.method=est.method, stab.method=stab.method,
-                                 refine.method=refine.method, lambda=lambda, const=const)
+                                 refine.method=refine.method, lambda=lambda, const=const, verbose=verbose)
   xhats.fit <- intrinsic.system[["xhats.fit"]]
   xhats.fit.curves <- intrinsic.system[["xhats.fit.curves"]]
   Ahat <- intrinsic.system[["Ahat"]]

@@ -15,8 +15,14 @@
 }
 
 ## The stabilizing procedure
-.stabilize <- function(Ahat, method="eigen-bound", bound=1e-4, tol=1e-5){
-    if (method=="eigen-bound"){
+.stabilize <- function(Ahat, Ts, method="eigen-bound", tol=1e-5){
+    if (method=="eigen-bound" | method=="eigen-bound2"){
+        ## First, compute the eigen-bounds from the Ts
+        Tlength=max(Ts)-min(Ts); dT <- min(abs(diff(Ts)))
+        real.upper <- -1e-4 / Tlength   #slightly negative for the real eigenvalues
+        real.lower <- -3/Tlength        #e^-3 is approx. 0.05
+        imaginary.bound=pi/dT           #at least 1/2 period within one dT
+
         Tmat <- eigen(Ahat)[["vectors"]]
         lambdas <- eigen(Ahat)[["values"]]
         N <- length(lambdas)
@@ -31,16 +37,24 @@
                 Tmat[, equivsets[[i]]] <- qr.Q(qr(Tmat[, equivsets[[i]]]))
             }
         }
-        lambdas2 <- complex(real=pmin(Re(lambdas), bound), imaginary=Im(lambdas))
+        lambdas2 <- complex(real=pmax(pmin(Re(lambdas), real.upper), real.lower),
+                            imaginary=pmax(pmin(Im(lambdas), imaginary.bound), -1*imaginary.bound))
         Sigma <- diag(lambdas2)
         ## Note that I can't use more efficient Conj(t(Tmat)) here
         ## because when a) Ahat is not of full rank; b) there are
         ## cerntain nontrivial invariant subspaces, Tmat is NOT
         ## unitary.
-        Ahat2 <- Re(Tmat %*% Sigma %*% solve(Tmat))
+        Ahat2a <- Re(Tmat %*% Sigma %*% solve(Tmat))
+    }
+    
+    if (method=="eigen-bound"){
+        Ahat2 <- Ahat2a
+    } else if (method=="eigen-bound2") {
+        Ahat2 <- 0.1*Ahat2a             #This is a compromise between eigen-bound and zero
     } else if (method=="random"){
+        sigma=.1/Tlength
         N <- nrow(Ahat)
-        Ahat2 <- bound*matrix(rnorm(N^2), nrow=N, ncol=N)
+        Ahat2 <- sigma*matrix(rnorm(N^2), nrow=N, ncol=N)
     } else if (method=="zero"){
         N <- nrow(Ahat)
         Ahat2 <- matrix(0, nrow=N, ncol=N)
