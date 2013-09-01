@@ -158,17 +158,23 @@ predict.pcode1 <- function(pcode.fit, y0.new, Ts.new=NULL){
 }
 
 ## individual cross-validation
-CV <- function(Y, Ts, K, center=FALSE, const=FALSE, refine.method="none", ...){
-  J <- length(Ts)
-  ## Due to the fact that it is hard to extrapolate, we will drop the
-  ## first time point for now.
-  trainsys <- foreach(j=2:(J-1)) %dopar%{
-    ## Ts=Ts; K=K
-    PCODE(Y[-j,], Ts=Ts[-j], K=K, center=center, const=const, refine.method=refine.method, ...)
-  }
-  y.fits <- t(sapply(2:(J-1), function(j) predict.pcode1(trainsys[[j-1]], Y[1,], Ts.new=Ts[j])))
-  rss <- sum((Y[2:(J-1),] - y.fits)^2)/ncol(Y)
-  return(rss)
+CV <- function(Y, Ts, Ks, folds=10, center=FALSE, const=FALSE, refine.method="none", ...){
+    J <- length(Ts)
+    ## Generate the index of testing time points first.  Due to the
+    ## fact that it is hard to extrapolate, we will drop the first and
+    ## last time points for now.
+    idx <- lapply(2:min(folds+1,J-1), function(j) seq(j,J-1,folds))
+    rss <- rep(0, length(Ks)); names(rss) <- paste("K", Ks, sep="")
+    for (k in Ks){
+        rss[paste("K",k,sep="")] <- foreach(j=1:length(idx), .combine="+") %dopar%{
+            ## Ts=Ts; K=K
+            Y.j <- Y[-idx[[j]],]; Ts.j <- Ts[-idx[[j]]]
+            trainsys.j <- PCODE(Y.j, Ts=Ts.j, K=k, center=center, const=const, refine.method=refine.method, ...)
+            y.fits <- predict.pcode1(trainsys.j, Y[1,], Ts.new=Ts[idx[[j]]])
+            sum((Y[idx[[j]], ] - y.fits)^2)
+        }
+    }
+    return(rss)
 }
 
 
