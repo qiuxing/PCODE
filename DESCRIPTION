@@ -4,7 +4,7 @@ Version: 0.1.4
 Author: Xing Qiu
 Description: Parameter estimation for high dimensional ordinary differential equations by principal component analyses.  It first uses .... fast .... and stable ...
 Maintainer: Xing Qiu <xqiu@bst.rochester.edu>
-Depends: R (>= 2.9.0), rnetweaver, fda, deSolve, elasticnet, foreach, doMC
+Depends: R (>= 2.9.0), rnetweaver, fda, deSolve, elasticnet, foreach
 Enhances:
 License: LGPL
 LazyLoad: yes
