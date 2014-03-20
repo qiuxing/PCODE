@@ -20,12 +20,17 @@ pcafun <- function(y,Ts,K, lambda=0.01, method=c("fpca", "pca", "spca"),
       centers <- rep(0.0,nrow(y))
       meancur <- fd(rep(0.0, mybasis$nbasis), mybasis)
     }; names(centers) <- rownames(y)
-    Bhat <- rr[["scores"]]; dimnames(Bhat) <- list(colnames(y),pcnames)
+    ## 3/20/2014. Make Bhat an (near-)orthogonal matrix
+    Bhat0 <- rr[["scores"]]
+    scale.coefs <- sqrt(nrow(Bhat0) * rr[["values"]][1:K])
+    Bhat <- Bhat0 %*% diag(1/scale.coefs)
+    dimnames(Bhat) <- list(colnames(y),pcnames)
     Bhat.qr <- qr(Bhat)
     ## rotation <- qr.Q(Bhat.qr); dimnames(rotation) <- list(colnames(y),pcnames)
     ## sdev <- abs(diag(qr.R(Bhat.qr))); names(sdev) <- pcnames
-    ## xhats.curves are just the harmonics
-    xhats.curves <- rr[["harmonics"]]
+    ## xhats.curves are just the harmonics (scaled by the eigenvals)
+    xhats.curves0 <- rr[["harmonics"]]
+    xhats.curves <- fd(coef(xhats.curves0) %*% diag(scale.coefs), mybasis)
     ## for fPCA, we evaluate eigen-functions at Ts directly. They are
     ## near, but not exactly, orthogonal.
     ## xhats <- eval.fd(xhats.curves, Ts)
@@ -40,8 +45,12 @@ pcafun <- function(y,Ts,K, lambda=0.01, method=c("fpca", "pca", "spca"),
       centers <- rep(0.0,nrow(y))
     }
     meancur <- smooth.basis(Ts, centers, mypar)[["fd"]]
-    xhats <- rr[["rotation"]][,1:K]  #The first K eigenvectors
-    Bhat <- rr[["x"]][,1:K]
+    ## 3/20/2014. Scale the Bhat matrix
+    Bhat0 <- rr[["x"]][,1:K]
+    scale.coefs <- rr[["sdev"]][1:K] * sqrt(nrow(Bhat0)-1)
+    Bhat <- Bhat0 %*% diag(1/scale.coefs)
+    xhats0 <- rr[["rotation"]][,1:K]  #The first K eigenvectors
+    xhats <- xhats0 %*% diag(scale.coefs)
     ## The xhat curves are represented by smoothed splines of xhats
     xhats.curves <- smooth.basis(Ts, xhats, mypar)[["fd"]]
   } else if (method=="spca"){
