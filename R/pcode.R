@@ -21,7 +21,7 @@ ode.fit <- function(Ts, xinit, A, b=NULL){
 ## and xhats.init estimated from pcafun(); C.init estimated from
 ## C.init.est(). const=T/F: whether the equation system is homogeneous
 ## or inhomogeneous.
-lowdim.est <- function(Ts, xhats, xhats.curves, weights=NULL, est.method=c("pda", "two.stage"), stab.method=c("eigen-bound", "eigen-bound2", "random", "zero", "none"), refine.method=c("pelos", "none"), lambda=0.01, const=FALSE, verbose=FALSE, ...){
+lowdim.est <- function(Ts, xhats, xhats.curves, weights=NULL, est.method=c("pda", "two.stage"), stab.method=c("eigen-bound", "eigen-bound2", "random", "zero", "none"), refine.method=c("pelos", "none"), lambda=.1^4, const=FALSE, verbose=FALSE, ...){
     K <- ncol(xhats); pcnames <- paste("PC",1:K,sep="")
     ## must make sure both xhats and xinit has the same, non-null names
     colnames(xhats) <- pcnames
@@ -71,7 +71,7 @@ lowdim.est <- function(Ts, xhats, xhats.curves, weights=NULL, est.method=c("pda"
 }
 
 ## The main function
-PCODE <- function(y, Ts, K, lambda=0.01, pca.method=c("fpca", "pca", "spca"), weight=c("varprop", "none"), est.method=c("pda", "two.stage"), stab.method=c("eigen-bound", "eigen-bound2", "random", "zero", "none"), refine.method=c("pelos", "none"), backfit.method=c("linearization", "lasso", "gen.inv"), center=FALSE, spca.para=2^seq(K)/2, const=FALSE, verbose=FALSE, ...){
+PCODE <- function(y, Ts, K, lambda=.1^4, pca.method=c("fpca", "pca", "spca"), weight=c("varprop", "none"), est.method=c("pda", "two.stage"), stab.method=c("eigen-bound", "eigen-bound2", "random", "zero", "none"), refine.method=c("pelos", "none"), backfit.method=c("linearization", "lasso", "gen.inv"), center=FALSE, spca.para=2^seq(K)/2, const=FALSE, verbose=FALSE, ...){
     ## The ... arguments are used by .backfit().
     pca.method <- match.arg(pca.method)
     weight <- match.arg(weight)
@@ -167,7 +167,7 @@ CV <- function(Y, Ts, Ks, folds=10, center=FALSE, const=FALSE, refine.method="no
         rss[paste("K",k,sep="")] <- foreach(j=1:length(idx), .combine="+") %dopar%{
             ## Ts=Ts; K=K
             Y.j <- Y[-idx[[j]],]; Ts.j <- Ts[-idx[[j]]]
-            trainsys.j <- PCODE(Y.j, Ts=Ts.j, K=k, center=center, const=const, refine.method=refine.method, ...)
+            trainsys.j <- PCODE(Y.j, Ts=Ts.j, K=k, center=center, const=const, refine.method=refine.method, backfit.method="gen.inv", ...)
             y.fits <- predict.pcode1(trainsys.j, Y[1,], Ts.new=Ts[idx[[j]]])
             sum((Y[idx[[j]], ] - y.fits)^2)
         }
