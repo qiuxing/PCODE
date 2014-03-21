@@ -104,19 +104,21 @@
     return(list("Ahat"=Ahat, "x0"=x0))
 }
 
-.backfit <- function(Bhat, A, method=c("lasso", "gen.inv"), prior=NULL, ...){
+.backfit <- function(Bhat, Astar, X0, Ts, method=c("linearization", "lasso", "gen.inv"), prior=NULL, ...){
     method <- match.arg(method)
     if (method=="lasso"){
         m <- nrow(Bhat)
-        Y <- t(A) %*% t(Bhat)
+        Y <- t(Astar) %*% t(Bhat)
         Theta <- matrix(0, nrow=m, ncol=m)
         for (i in 1:m){
             larscoefs <- coef(lars(x=t(Bhat), y=Y[,i], intercept=FALSE, use.Gram=FALSE, ...))
             Theta[i,] <- larscoefs[nrow(larscoefs),]
         }
+    } else if (method=="linearization"){
+        Theta <- Linearization(Astar, Bhat, X0, Ts, ...)
     } else if (method=="gen.inv"){
         Binv <- solve(t(Bhat) %*% Bhat) %*% t(Bhat)
-        Theta <- Bhat %*% A %*% Binv
+        Theta <- Bhat %*% Astar %*% Binv
     } else {
         stop("Supported weighting methods are lasso and gen.inv.")
     }
