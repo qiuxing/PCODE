@@ -21,7 +21,7 @@ ode.fit <- function(Ts, xinit, A, b=NULL){
 ## and xhats.init estimated from pcafun(); C.init estimated from
 ## C.init.est(). const=T/F: whether the equation system is homogeneous
 ## or inhomogeneous.
-lowdim.est <- function(Ts, xhats, xhats.curves, weights=NULL, est.method=c("pda", "two.stage"), stab.method=c("eigen-bound", "eigen-bound2", "random", "zero", "none"), refine.method=c("pelos", "none"), lambda=.1^4, const=FALSE, verbose=FALSE, ...){
+lowdim.est <- function(Ts, xhats, xhats.curves, weights=NULL, est.method=c("pda", "two.stage", "pda0", "two.stage0"), est.pen=.1^4, stab.method=c("eigen-bound", "eigen-bound2", "random", "zero", "none"), refine.method=c("pelos", "none"), lambda=.1^4, const=FALSE, verbose=FALSE, ...){
     K <- ncol(xhats); pcnames <- paste("PC",1:K,sep="")
     ## must make sure both xhats and xinit has the same, non-null names
     colnames(xhats) <- pcnames
@@ -44,7 +44,7 @@ lowdim.est <- function(Ts, xhats, xhats.curves, weights=NULL, est.method=c("pda"
     stab.method <- match.arg(stab.method)
     refine.method <- match.arg(refine.method)
 
-    Ab1 <- .est(Ts, Xt, method=est.method)
+    Ab1 <- .est(Ts, Xt, method=est.method, est.pen=est.pen)
     Ab2 <- .stabilize(Ab1, Ts, method=stab.method)
     RF <- .refine(Ts, Xt, xhats, Ab2, method=refine.method, weights=weights, verbose=verbose)
     Ab <- RF[["Ahat"]]; x0 <- RF[["x0"]]
@@ -71,7 +71,7 @@ lowdim.est <- function(Ts, xhats, xhats.curves, weights=NULL, est.method=c("pda"
 }
 
 ## The main function
-PCODE <- function(y, Ts, K, lambda=.1^4, pca.method=c("fpca", "pca", "spca"), weight=c("varprop", "none"), est.method=c("pda", "two.stage"), stab.method=c("eigen-bound", "eigen-bound2", "random", "zero", "none"), refine.method=c("pelos", "none"), backfit.method=c("linearization", "lasso", "gen.inv"), center=FALSE, spca.para=2^seq(K)/2, const=FALSE, verbose=FALSE, ...){
+PCODE <- function(y, Ts, K, lambda=.1^4, pca.method=c("fpca", "pca", "spca"), weight=c("varprop", "none"), est.method=c("pda", "two.stage", "pda0", "two.stage0"), est.pen=.1^4, stab.method=c("eigen-bound", "eigen-bound2", "random", "zero", "none"), refine.method=c("none", "pelos"), backfit.method=c("linearization", "lasso", "gen.inv"), L1pen=.9, center=FALSE, spca.para=2^seq(K)/2, const=FALSE, verbose=FALSE, ...){
     ## The ... arguments are used by .backfit().
     pca.method <- match.arg(pca.method)
     weight <- match.arg(weight)
@@ -99,7 +99,7 @@ PCODE <- function(y, Ts, K, lambda=.1^4, pca.method=c("fpca", "pca", "spca"), we
     }
 
     intrinsic.system <- lowdim.est(Ts, xhats=xhats, xhats.curves=xhats.curves, weights=weights,
-                                   est.method=est.method, stab.method=stab.method,
+                                   est.method=est.method, est.pen=est.pen, stab.method=stab.method,
                                    refine.method=refine.method, lambda=lambda, const=const, verbose=verbose)
     xhats.fit <- intrinsic.system[["xhats.fit"]]
     xhats.fit.curves <- intrinsic.system[["xhats.fit.curves"]]
@@ -112,7 +112,7 @@ PCODE <- function(y, Ts, K, lambda=.1^4, pca.method=c("fpca", "pca", "spca"), we
     mybasis <- xhats.curves[["basis"]]
     y.fit.curves <- fd(coef(xhats.fit.curves) %*% t(Bhat) + mucoef, mybasis)
     ## backfit the original eqn system
-    Theta <- .backfit(Bhat, Ahat, xhats.fit[1,], Ts, method=backfit.method, ...)
+    Theta <- .backfit(Bhat, Ahat, xhats.fit[1,], Ts, method=backfit.method, L1pen=L1pen, ...)
     ## Compute RSS
     if (is.list(y)) {                     #many subjects
         rss <- mean(sapply(y, function(yn) sum((yn-y.fit)^2)))/m
@@ -201,6 +201,22 @@ CV.group <- function(Ylist, Ts, K, center=FALSE, const=FALSE, ...){
     names(rss) <- names(Ylist)
     return(list(trainsys=trainsys, y.fit.list=y.fit.list, y.fit.curves.list=y.fit.curves.list, rss=rss, lambda=lambda, Ts=Ts))
 }
+
+## Estimating K.
+## Kest <- function(pcaobj, Ts, Ks, pca.method=c("fpca", "pca", "spca"), method=c("varprop", "cv", "pca.cv"), var.prop=.1^3, ...){
+##     pca.results <- pcafun(y, Ts, K=K, lambda=lambda, method=pca.method, center=center, spca.para=spca.para)
+##     if (method=="varprop"){
+##         ## just cutoff at a given varprop
+        
+##     } else if (method=="cv"){
+##     } else if (method=="pca.cv"){
+##     } else {
+##         stop(paste("Method",method,"is not implemented in function Kest()!"))
+##     }
+    
+
+##     return(Kstar)
+## }
 
 
 ## ## wrapper for plotting

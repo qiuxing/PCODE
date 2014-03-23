@@ -1,3 +1,11 @@
+## A Ridge-like matrix inverse for symmetric matrices
+ridge.inv <- function(SymMat, lambda.prop=.1^4){
+    ee <- eigen(SymMat); LL <- ee[["values"]]; TT <- ee[["vectors"]]
+    lambda <- sum(LL) * lambda.prop
+    inv.mat <- TT %*% diag(1/(pmax(LL, lambda))) %*% t(TT)
+    return(inv.mat)
+}
+
 ## A wrapper to select smoothing parameter automatically
 autolambda <- function(Ts, Y, loglams=seq(-2,4,.5), subset=TRUE, nsubset=50){
   K <- length(loglams); lambdas <- 10^loglams
@@ -156,7 +164,7 @@ graff.mean <- function(pcalist){
 ## the Bhat matrix, but it can be used to produce a full list of other
 ## objects as well.  Note that the affine projection does not change
 ## meancur/centers.
-reprojection <- function(Y2, PCA1, Bhat.only=FALSE){
+reprojection <- function(Y2, PCA1, Bhat.only=FALSE, lambda.prop=.1^4){
   params <- PCA1[["parameters"]]; method <- params[["method"]]
   Ts <- params[["Ts"]]; K <- params[["K"]]
   pcnames <- paste("PC",1:K,sep="")
@@ -170,7 +178,7 @@ reprojection <- function(Y2, PCA1, Bhat.only=FALSE){
     ymat <- coef(ycurves.centered)
     ## Since Xt may only be approx orthonormal, I use the following
     ## safer formula to compute Bhat
-    Bhat <- t(solve(inprod(Xt, Xt)) %*% inprod(Xt, ycurves.centered))
+    Bhat <- t(ridge.inv(inprod(Xt, Xt), lambda.prop=lambda.prop) %*% inprod(Xt, ycurves.centered))
     ngenes <- ncol(coef(ycurves))
     ## Calculating the total variance
     Beta <- fd(diag(mybasis[["nbasis"]]), mybasis)
@@ -183,7 +191,7 @@ reprojection <- function(Y2, PCA1, Bhat.only=FALSE){
   } else if (method=="pca"){
     X <- PCA1[["xhats"]]
     Y2.centered <- sweep(Y2, 1, PCA1[["centers"]])
-    Bhat <- t(solve(t(X) %*% X) %*% t(X) %*% Y2.centered)
+    Bhat <- t(ridge.inv(t(X) %*% X, lambda.prop=lambda.prop) %*% t(X) %*% Y2.centered)
     totalvar <- sum(Y2.centered^2)
     varlist <- sapply(1:K, function(k) sum((Bhat[,k] %*% t(X[,k]))^2))
   } else if (method=="spca"){
@@ -191,7 +199,7 @@ reprojection <- function(Y2, PCA1, Bhat.only=FALSE){
     ## different implementation.
     X <- PCA1[["xhats"]]
     Y2.centered <- sweep(Y2, 1, PCA1[["centers"]])
-    Bhat <- t(solve(t(X) %*% X) %*% t(X) %*% Y2.centered)
+    Bhat <- t(ridge.inv(t(X) %*% X, lambda.prop=lambda.prop) %*% t(X) %*% Y2.centered)
     totalvar <- sum(Y2.centered^2)
     varlist <- sapply(1:K, function(k) sum((Bhat[,k] %*% t(X[,k]))^2))
   } else {

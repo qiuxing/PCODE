@@ -1,13 +1,20 @@
 ## The two-stage backends
 
-.est <- function(Ts, Xt, method="pda"){
-    if (method=="two.stage"){
+.est <- function(Ts, Xt, est.pen=.1^4, method="pda"){
+    if (method=="two.stage0"){
         X <- eval.fd(Ts, Xt); X.deriv <- eval.fd(Ts,deriv(Xt))
         Ahat <- t(X.deriv) %*% X %*% solve(t(X) %*% X)
-    } else if (method=="pda"){
+    } else if (method=="two.stage"){
+        X <- eval.fd(Ts, Xt); X.deriv <- eval.fd(Ts,deriv(Xt))
+        Ahat <- t(X.deriv) %*% X %*% ridge.inv(t(X) %*% X, lambda.prop=est.pen)
+    } else if (method=="pda0"){
         Sigma.xx <- inprod(Xt, Xt)
         Sigma.xderivx <- inprod(deriv(Xt), Xt)
         Ahat <- Sigma.xderivx %*% solve(Sigma.xx)
+    } else if (method=="pda"){
+        Sigma.xx <- inprod(Xt, Xt)
+        Sigma.xderivx <- inprod(deriv(Xt), Xt)
+        Ahat <- Sigma.xderivx %*% ridge.inv(Sigma.xx, lambda.prop=est.pen)
     } else {
         stop(paste("Method",method,"is not implemented in function .est()!"))
     }
