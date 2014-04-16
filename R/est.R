@@ -111,7 +111,7 @@
     return(list("Ahat"=Ahat, "x0"=x0))
 }
 
-.backfit <- function(Bhat, Astar, X0, Ts, method=c("linearization", "lasso", "gen.inv"), prior=NULL, ...){
+.backfit <- function(Bhat, Astar, X0, Y, Ts, method=c("linearization", "lasso", "gen.inv"), prior=NULL, compensate=TRUE, gamma.approx=TRUE, ...){
     method <- match.arg(method)
     if (method=="lasso"){
         m <- nrow(Bhat)
@@ -122,7 +122,7 @@
             Theta[i,] <- larscoefs[nrow(larscoefs),]
         }
     } else if (method=="linearization"){
-        Theta <- Linearization(Astar, Bhat, X0, Ts, ...)
+        Theta <- Linearization(Astar, Bhat, X0, Y, Ts, compensate=compensate, gamma.approx=gamma.approx, ...)
     } else if (method=="gen.inv"){
         Binv <- solve(t(Bhat) %*% Bhat) %*% t(Bhat)
         Theta <- Bhat %*% Astar %*% Binv

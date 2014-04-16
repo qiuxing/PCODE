@@ -71,7 +71,7 @@ lowdim.est <- function(Ts, xhats, xhats.curves, weights=NULL, est.method=c("pda"
 }
 
 ## The main function
-PCODE <- function(y, Ts, K, lambda=.1^4, pca.method=c("fpca", "pca", "spca"), weight=c("varprop", "none"), est.method=c("pda", "two.stage", "pda0", "two.stage0"), est.pen=.1^4, stab.method=c("eigen-bound", "eigen-bound2", "random", "zero", "none"), refine.method=c("none", "pelos"), backfit.method=c("linearization", "lasso", "gen.inv"), L1pen=.9, center=FALSE, spca.para=2^seq(K)/2, const=FALSE, verbose=FALSE, ...){
+PCODE <- function(y, Ts, K, lambda=.1^4, pca.method=c("fpca", "pca", "spca"), weight=c("varprop", "none"), est.method=c("pda", "two.stage", "pda0", "two.stage0"), est.pen=.1^4, stab.method=c("eigen-bound", "eigen-bound2", "random", "zero", "none"), refine.method=c("none", "pelos"), backfit.method=c("linearization", "lasso", "gen.inv"), L1pen=.9, compensate=TRUE, gamma.approx=TRUE, center=FALSE, spca.para=2^seq(K)/2, const=FALSE, verbose=FALSE, ...){
     ## The ... arguments are used by .backfit().
     pca.method <- match.arg(pca.method)
     weight <- match.arg(weight)
@@ -112,7 +112,7 @@ PCODE <- function(y, Ts, K, lambda=.1^4, pca.method=c("fpca", "pca", "spca"), we
     mybasis <- xhats.curves[["basis"]]
     y.fit.curves <- fd(coef(xhats.fit.curves) %*% t(Bhat) + mucoef, mybasis)
     ## backfit the original eqn system
-    Theta <- .backfit(Bhat, Ahat, xhats.fit[1,], Ts, method=backfit.method, L1pen=L1pen, ...)
+    Theta <- .backfit(Bhat, Ahat, xhats.fit[1,], xhats, Ts, method=backfit.method, L1pen=L1pen, compensate=compensate, gamma.approx=gamma.approx, ...)
     ## Compute RSS
     if (is.list(y)) {                     #many subjects
         rss <- mean(sapply(y, function(yn) sum((yn-y.fit)^2)))/m
