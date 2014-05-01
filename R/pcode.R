@@ -71,21 +71,20 @@ lowdim.est <- function(Ts, xhats, xhats.curves, weights=NULL, est.method=c("pda"
 }
 
 ## The main function
-PCODE <- function(y, Ts, K, lambda=.1^4, pca.method=c("fpca", "pca", "spca"), weight=c("varprop", "none"), est.method=c("pda", "two.stage", "pda0", "two.stage0"), est.pen=.1^4, stab.method=c("eigen-bound", "eigen-bound2", "random", "zero", "none"), refine.method=c("none", "pelos"), backfit.method=c("linearization", "lasso", "gen.inv"), L1pen=.9, compensate=TRUE, gamma.approx=TRUE, center=FALSE, spca.para=2^seq(K)/2, const=FALSE, verbose=FALSE, ...){
+PCODE <- function(y, Ts, K, lambda=.1^5, pca.method=c("fpca", "pca"), weight=c("varprop", "none"), prescreen.prop=.7, lambda1=.5, lambda2="auto", thresh=1e-11, cutoff=.05, est.method=c("pda", "two.stage", "pda0", "two.stage0"), est.pen=.1^4, stab.method=c("eigen-bound", "eigen-bound2", "random", "zero", "none"), refine.method=c("none", "pelos"), compensate=TRUE, gamma.approx=TRUE, center=FALSE, const=FALSE, verbose=FALSE, ...){
     ## The ... arguments are used by .backfit().
     pca.method <- match.arg(pca.method)
     weight <- match.arg(weight)
     est.method <- match.arg(est.method)
     stab.method <- match.arg(stab.method)
     refine.method <- match.arg(refine.method)
-    backfit.method <- match.arg(backfit.method)
     ## test if y is a list of subjects or just one subject
     if (is.list(y)) {                     #many subjects
         m <- ncol(y[[1]])
-        pca.results <- group.pcafun(y, Ts=Ts, K=K, lambda=lambda, method=pca.method, center=center, spca.para=spca.para)
+        pca.results <- group.pcafun(y, Ts=Ts, K=K, lambda=lambda, method=pca.method, center=center)
     } else {                              #just one subject
         m <- ncol(y)
-        pca.results <- pcafun(y, Ts, K=K, lambda=lambda, method=pca.method, center=center, spca.para=spca.para)
+        pca.results <- pcafun(y, Ts, K=K, lambda=lambda, method=pca.method, center=center)
     }
 
     xhats=pca.results[["xhats"]]
@@ -112,7 +111,8 @@ PCODE <- function(y, Ts, K, lambda=.1^4, pca.method=c("fpca", "pca", "spca"), we
     mybasis <- xhats.curves[["basis"]]
     y.fit.curves <- fd(coef(xhats.fit.curves) %*% t(Bhat) + mucoef, mybasis)
     ## backfit the original eqn system
-    Theta <- .backfit(Bhat, Ahat, xhats.fit[1,], xhats, Ts, method=backfit.method, L1pen=L1pen, compensate=compensate, gamma.approx=gamma.approx, ...)
+    bfit <- backfit(Bhat, Ahat, xhats.fit[1,], xhats, Ts, lambda1=lambda1, lambda2=lambda2, compensate=compensate, gamma.approx=gamma.approx, thresh=thresh, cutoff=cutoff, prescreen.prop=prescreen.prop, ...)
+    Theta <- bfit[["Theta"]]
     ## Compute RSS
     if (is.list(y)) {                     #many subjects
         rss <- mean(sapply(y, function(yn) sum((yn-y.fit)^2)))/m
@@ -126,6 +126,7 @@ PCODE <- function(y, Ts, K, lambda=.1^4, pca.method=c("fpca", "pca", "spca"), we
                  Ahat=Ahat,
                  bvec=intrinsic.system[["bvec"]],
                  Bhat=Bhat, Binv=pca.results[["Binv"]],
+                 bfit=bfit,
                  Theta=Theta,
                  meancur=pca.results[["meancur"]],
                  centers=pca.results[["centers"]],
@@ -167,7 +168,7 @@ CV <- function(Y, Ts, Ks, folds=10, center=FALSE, const=FALSE, refine.method="no
         rss[paste("K",k,sep="")] <- foreach(j=1:length(idx), .combine="+") %dopar%{
             ## Ts=Ts; K=K
             Y.j <- Y[-idx[[j]],]; Ts.j <- Ts[-idx[[j]]]
-            trainsys.j <- PCODE(Y.j, Ts=Ts.j, K=k, center=center, const=const, refine.method=refine.method, backfit.method="gen.inv", ...)
+            trainsys.j <- PCODE(Y.j, Ts=Ts.j, K=k, center=center, const=const, refine.method=refine.method, ...)
             y.fits <- predict.pcode1(trainsys.j, Y[1,], Ts.new=Ts[idx[[j]]])
             sum((Y[idx[[j]], ] - y.fits)^2)
         }

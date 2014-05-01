@@ -143,7 +143,9 @@ linearize <- function(A, B, X0, Y, Ts, compensate=TRUE, gamma.approx=TRUE, coefs
     } else {
         stop("Only these pre-screening methods are implemented: L2 (default), L1, and none.")
     }
-    zeroindx <- which(Svec<=quantile(Svec, prop))
+    ## min of max Svec/1e-3 or quantile, to make it more robust
+    Scut <- max(quantile(Svec, prop), max(Svec)*1e-3)
+    zeroindx <- which(Svec<=Scut)
     if (length(zeroindx)>0){
         X2 <- X[, -zeroindx]
     } else {
@@ -152,87 +154,44 @@ linearize <- function(A, B, X0, Y, Ts, compensate=TRUE, gamma.approx=TRUE, coefs
     return (list(X=X2, zeroindx=zeroindx))
 }
 
-lin2cv.enet <- function(linobj, A, lambda2="auto", K=5, s.seq=seq(.5, 1, .01), prescreen="L1", prescreen.prop=.5, ...){
+lin2glmnet <- function(linobj, Theta0, lambda1=0.5, lambda2="auto", thresh=1e-11, prescreen="L1", prescreen.prop=.7, cutoff=.05, ...){
     X <- linobj[["XX"]]; Y <- linobj[["YY"]]
     p <- sqrt(ncol(X))
     ## Pre-screening
-    PS <- .prescreen(A, X, method=prescreen, prop=prescreen.prop)
+    PS <- .prescreen(Theta0, X, method=prescreen, prop=prescreen.prop)
     X2 <- PS[["X"]]; zeroindx <- PS[["zeroindx"]]
     if (lambda2=="auto") lambda2 <- linobj[["lambda2"]]
-    ENCV <- cv.enet(X2, Y, K=K, lambda=lambda2, s=s.seq, mode="fraction", intercept=FALSE, normalize=FALSE, eps=.1^6, ...)
-    best.s <- ENCV[["s"]][which.min(ENCV[["cv"]])]
-    return(list(encv.obj=ENCV, best.s=best.s, zeroindx=zeroindx))
-}
-
-lin2enet <- function(linobj, A, lambda2="auto", prescreen="L1", prescreen.prop=.5, ...){
-    X <- linobj[["XX"]]; Y <- linobj[["YY"]]
-    p <- sqrt(ncol(X))
-    ## Pre-screening
-    PS <- .prescreen(A, X, method=prescreen, prop=prescreen.prop)
-    X2 <- PS[["X"]]; zeroindx <- PS[["zeroindx"]]
-    if (lambda2=="auto") lambda2 <- linobj[["lambda2"]]
-    ## limit number of LARS-EN steps to 3*length(Y) instead of 50*length(Y).
-    ## N.steps <- 3*length(Y)
-    EN <- enet(X2, Y, lambda=lambda2, intercept=FALSE, normalize=FALSE, eps=.1^5, ...)
-    return(list(enet.obj=EN, zeroindx=zeroindx))
-}
-
-lin2glmnet <- function(linobj, A, lambda2="auto", prescreen="L1", prescreen.prop=.5, ...){
-    X <- linobj[["XX"]]; Y <- linobj[["YY"]]
-    p <- sqrt(ncol(X))
-    ## Pre-screening
-    PS <- .prescreen(A, X, method=prescreen, prop=prescreen.prop)
-    X2 <- PS[["X"]]; zeroindx <- PS[["zeroindx"]]
-    if (lambda2=="auto") lambda2 <- linobj[["lambda2"]]
-    ## Let us use an arbitrary alpha for now.  It seems that we can't
-    ## control lambda2 directly in glmnet
-    GN <- glmnet(X2, Y, alpha=.99, intercept=FALSE, standardize=FALSE, thresh=.1^5, ...)
-    return(list(glmnet.obj=EN, zeroindx=zeroindx))
-}
-
-
-glmnet2A <- function(lin.glmnet.obj, cutoff=.1, s=200, ...){
-    GN <- lin.glmnet.obj[["glmnet.obj"]]; zeroindx=lin.enet.obj[["zeroindx"]]
-    Avec2 <- coef(GN, s=s)
-    p <- sqrt(length(Avec2) + length(zeroindx))
+    ## glmnet needs a little computation
+    N <- length(Y); sdY <- sd(Y) * sqrt((N-1)/N)
+    X.std <- X2/sdY; Y.std <- Y/sdY
+    lambda1.std <- max(lambda1/(sdY)^2, 1e-7)
+    lambda2.std <- max(lambda2/(sdY)^2, 1e-7)
+    s <- (lambda1.std + lambda2.std)/N; alpha <- lambda1.std/(N*s)
+    LL <- c(0, 10^seq(-2,2, .01) * s, max(1, 100*s))
+    gnet <- glmnet(X.std, Y.std, alpha=alpha, standardize=FALSE, intercept=FALSE, lambda=LL, thresh = thresh, ...)
+    ## the first item is the intercept
+    Thetavec2 <- as.numeric(coef(gnet, s=s)[-1, ])
     ## Add pre-determined zeros back. Needs to be written in more efficient code
     if (length(zeroindx)>0){
-        Avec <- rep(0, p^2)
-        Avec[-zeroindx] <- Avec2
+        Thetavec <- rep(0, p^2)
+        Thetavec[-zeroindx] <- Thetavec2
     } else {
-        Avec <- Avec2
+        Thetavec <- Thetavec2
     }
     ## cut really small values
-    Avec.cut <- replace(Avec, abs(Avec)<cutoff, 0)
-    Ahat <- matrix(Avec.cut, p, p)
-    return(Ahat)
-}
-
-enet2A <- function(lin.enet.obj, cutoff=.1, s=.9, ...){
-    EN <- lin.enet.obj[["enet.obj"]]; zeroindx=lin.enet.obj[["zeroindx"]]
-    Avec2 <- predict(EN, s=s, type="coef", mode="fraction")[["coefficients"]]
-    p <- sqrt(length(Avec2) + length(zeroindx))
-    ## Add pre-determined zeros back. Needs to be written in more efficient code
-    if (length(zeroindx)>0){
-        Avec <- rep(0, p^2)
-        Avec[-zeroindx] <- Avec2
-    } else {
-        Avec <- Avec2
-    }
-    ## cut really small values
-    Avec.cut <- replace(Avec, abs(Avec)<cutoff, 0)
-    Ahat <- matrix(Avec.cut, p, p)
-    return(Ahat)
+    Thetavec.cut <- replace(Thetavec, abs(Thetavec)<cutoff, 0)
+    Theta <- matrix(Thetavec.cut, p, p)
+    return(list(Theta=Theta, glmnet.obj=gnet, zeroindx=zeroindx, s=s, alpha=alpha, cutoff=cutoff))
 }
 
 ## The big wrapper function
-Linearization <- function(Astar, Bhat, X0, Y, Ts, compensate=TRUE, gamma.approx=TRUE, coefs=c("integral", "sum"), level=5, eigen.prop.thresh=0.1^5, lambda2.min=0.1^5, prescreen="L1", prescreen.prop=.5, cutoff=0.1, L1pen=0.9, ...){
+backfit <- function(Bhat, Astar, X0, Y, Ts, lambda1=.5, lambda2="auto", thresh=1e-11, cutoff=0.1, compensate=TRUE, gamma.approx=TRUE, coefs=c("integral", "sum"), level=5, eigen.prop.thresh=0.1^5, lambda2.min=0.1^5, prescreen="L1", prescreen.prop=.5,  ...){
     coefs <- match.arg(coefs)
     Binv <- solve(t(Bhat) %*% Bhat) %*% t(Bhat)
     ThetaHat <- Bhat %*% Astar %*% Binv
-    ## 3-step computation
+    ## linearization
     LIN <- linearize(Astar, Bhat, X0, Y, Ts, compensate=compensate, gamma.approx=gamma.approx, coefs=coefs, level=level, eigen.prop.thresh=eigen.prop.thresh, lambda2.min=lambda2.min)
-    LinEnet <- lin2enet(LIN, ThetaHat, lambda2=LIN[["lambda2"]], prescreen=prescreen, prescreen.prop=prescreen.prop, ...)
-    Ahat2 <- enet2A(LinEnet, cutoff=cutoff, s=L1pen)
-    return(Ahat2)
+    ## glmnet
+    bfit <- lin2glmnet(LIN, ThetaHat, lambda1=lambda1, lambda2=lambda2, prescreen=prescreen, prescreen.prop=prescreen.prop, thresh=thresh, ...)
+    return(bfit)
 }
