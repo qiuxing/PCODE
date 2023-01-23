@@ -105,3 +105,37 @@
 ##   return(Ahat)
 ## }
 
+## A series expansion for Sigma. Accurate only after level=30. Much slower than direct computation (.Sigmadef()).
+## .SigmaSeries <- function(A, X0, Ts, coefs=c("integral", "sum"), level=30){
+##     coefs <- match.arg(coefs)
+##     p <- nrow(A)
+##     ## compute the building blocks first
+##     An <- lapply(0:level, function(n) A %^% n)
+##     AnX <- lapply(0:level, function(n) as.vector(An[[n+1]] %*% X0))
+##     AA <- array(0, c(1+level,1+level,p,p))
+##     AXXA <- array(0, c(1+level,1+level,p,p))
+##     for (n1 in 0:level){
+##         for (n2 in 0:level){
+##             AA[n1+1, n2+1, ,] <- t(An[[n1+1]]) %*% An[[n2+1]]
+##             AXXA[n1+1, n2+1, ,] <- AnX[[n1+1]] %*% t(AnX[[n2+1]])
+##         }
+##     }
+##     ## put everything together
+##     Sigma <- matrix(0, p^2, p^2)
+##     for (m1 in 0:level){
+##         for (n1 in 0:level){
+##             for (m2 in 0:level){
+##                 for (n2 in 0:level){
+##                     if (coefs == "integral"){
+##                         cc <- 1/(m1+n1+m2+n2+3)
+##                     } else if (coefs == "sum"){
+##                         cc <- mean(Ts^(m1+n1+m2+n2+2))
+##                     } else {
+##                         stop("coefs must be: 1. integral; 2. sum.")
+##                     }
+##                     sm <- AXXA[n1+1, n2+1, ,] %x% AA[m1+1, m2+1, ,]
+##                     Sigma <- Sigma + cc*sm/(factorial(m1+n1+1) *factorial(m2+n2+1))
+##                 }}}}
+##     return(Sigma)
+## }
+

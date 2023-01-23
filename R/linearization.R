@@ -1,37 +1,21 @@
-.SigmaSeries <- function(A, X0, Ts, coefs=c("integral", "sum"), level=5){
-    coefs <- match.arg(coefs)
-    p <- nrow(A)
-    ## compute the building blocks first
-    An <- lapply(0:level, function(n) A %^% n)
-    AnX <- lapply(0:level, function(n) as.vector(An[[n+1]] %*% X0))
-    AA <- array(0, c(1+level,1+level,p,p))
-    AXXA <- array(0, c(1+level,1+level,p,p))
-    for (n1 in 0:level){
-        for (n2 in 0:level){
-            AA[n1+1, n2+1, ,] <- t(An[[n1+1]]) %*% An[[n2+1]]
-            AXXA[n1+1, n2+1, ,] <- AnX[[n1+1]] %*% t(AnX[[n2+1]])
+.Sigmadef <- function(Ahat, X0, Ts){
+    p <- length(X0); J <- length(Ts)
+    tLX <- matrix(0, p*J, p^2)
+    for (k in 1:p) {
+        for (l in 1:p) {
+            Ekl <- matrix(0, p, p)
+            Ekl[k, l] <- 1
+            L.kl <- sapply(Ts, function(tt) tt * expmFrechet(tt * Ahat, Ekl, expm = F)[["Lexpm"]] %*% X0)
+            tLX[, (l-1)*p+k] <- as.vector(L.kl)
         }
     }
-    ## put everything together
-    Sigma <- matrix(0, p^2, p^2)
-    for (m1 in 0:level){
-        for (n1 in 0:level){
-            for (m2 in 0:level){
-                for (n2 in 0:level){
-                    if (coefs == "integral"){
-                        cc <- 1/(m1+n1+m2+n2+3)
-                    } else if (coefs == "sum"){
-                        cc <- mean(Ts^(m1+n1+m2+n2+2))
-                    } else {
-                        stop("coefs must be: 1. integral; 2. sum.")
-                    }
-                    sm <- AXXA[n1+1, n2+1, ,] %x% AA[m1+1, m2+1, ,]
-                    Sigma <- Sigma + cc*sm/(factorial(m1+n1+1) *factorial(m2+n2+1))
-                }}}}
-    return(Sigma)
+    lbasis <- lapply(Ts, function(tt) expm(Ahat*tt))
+    return(t(tLX) %*% tLX/J)
 }
 
-.vf <- function(A, X0, Ts, coefs=c("integral", "sum"), level=5){
+
+
+.vf <- function(A, X0, Ts, coefs=c("integral", "sum"), level=30){
     coefs <- match.arg(coefs)
     p <- nrow(A)
     combs <- expand.grid(0:level, 0:level)
@@ -71,13 +55,14 @@ gammafun <- function(A, B, X0, Y, Ts){
     return(gamma)
 }
 
-linearize <- function(A, B, X0, Y, Ts, compensate=TRUE, gamma.approx=TRUE, coefs=c("integral", "sum"), level=5, eigen.prop.thresh=0.1^5, lambda2.min=0.1^5){
+linearize <- function(A, B, X0, Y, Ts, compensate=TRUE, gamma.approx=TRUE, coefs=c("integral", "sum"), level=30, eigen.prop.thresh=0.1^5, lambda2.min=0.1^5){
     ## This function transforms the original ODE fitting problem into
     ## a LASSO regression problem by computational shortcuts
     coefs <- match.arg(coefs)           #for Sigma/V
     p <- length(X0); P <- nrow(B)
     ## First, let's linearize the small system
-    Sigma <- .SigmaSeries(A, X0, Ts, coefs=coefs, level=level)
+    ## Sigma <- .SigmaSeries(A, X0, Ts, coefs=coefs, level=level)
+    Sigma <- .Sigmadef(A, X0, Ts)
     ## gamma <- Sigma %*% as.vector(A)
     V <- .vf(A, X0, Ts, coefs=coefs, level=level)
     ## The simplified XX and YY
@@ -116,10 +101,13 @@ linearize <- function(A, B, X0, Y, Ts, compensate=TRUE, gamma.approx=TRUE, coefs
     } else {
         LLB2 <- LLB
     }
-    XX <- diag(sqrt(LLB2)) %*% t(TB)
+    ## XX <- diag(sqrt(LLB2)) %*% t(TB)
+    XX <- sweep(t(TB), MARGIN=1, sqrt(LLB2), "*")
     ## Compute YY based on shortcut or definition
     if (gamma.approx) {
-        YY <- drop((diag(sqrt(LLB2)) + lambda2 * diag(1/sqrt(LLB2))) %*% t(TB) %*% as.vector(B %*% A %*% t(B)))
+        ## YY <- drop((diag(sqrt(LLB2)) + lambda2 * diag(1/sqrt(LLB2))) %*% t(TB) %*% as.vector(B %*% A %*% t(B)))
+        Lvec <- sqrt(LLB2) + lambda2 * 1/sqrt(LLB2)
+        YY <- drop(sweep(t(TB), MARGIN=1, Lvec, "*") %*% as.vector(B %*% A %*% t(B)))
     } else {
         gamma <- gammafun(A, B, X0, Y, Ts)
         YY <- drop(diag(1/sqrt(LLB2)) %*% t(TB) %*% (gamma - lambda2*as.vector(B %*% A %*% t(B))))
@@ -127,10 +115,11 @@ linearize <- function(A, B, X0, Y, Ts, compensate=TRUE, gamma.approx=TRUE, coefs
     return(list(XX=XX, YY=YY, V=V, lambda2=lambda2))
 }
 
-.prescreen <- function(A, X, method=c("L1", "L2", "marginal", "none"), prop=.5){
+.prescreen <- function(A, X, method=c("L1", "L2", "marginal", "none", "SIS"), prop=.5){
     ## A wrapper for various pre-screening methods
     ## First, normalize X so that their columns are comparable
-    X.std <- X %*% diag(as.vector(A))
+    ## X.std <- X %*% diag(as.vector(A))
+    X.std <- sweep(X, MARGIN=2, as.vector(A), "*")
     method <- match.arg(method)
     if (method=="none"){
         return (list(X=X, zeroindx=integer(0)))
@@ -154,44 +143,61 @@ linearize <- function(A, B, X0, Y, Ts, compensate=TRUE, gamma.approx=TRUE, coefs
     return (list(X=X2, zeroindx=zeroindx))
 }
 
-lin2glmnet <- function(linobj, Theta0, lambda1=0.5, lambda2="auto", thresh=1e-11, prescreen="L1", prescreen.prop=.7, cutoff=.05, ...){
+lin2enet <- function(linobj, Theta0, lambda1=1e-5, lambda2="auto", thresh=1e-11, prescreen="L1", prescreen.prop=.7, cutoff=.05, ...){
     X <- linobj[["XX"]]; Y <- linobj[["YY"]]
-    p <- sqrt(ncol(X))
+    P <- sqrt(ncol(X))
     ## Pre-screening
     PS <- .prescreen(Theta0, X, method=prescreen, prop=prescreen.prop)
     X2 <- PS[["X"]]; zeroindx <- PS[["zeroindx"]]
     if (lambda2=="auto") lambda2 <- linobj[["lambda2"]]
-    ## glmnet needs a little computation
-    N <- length(Y); sdY <- sd(Y) * sqrt((N-1)/N)
-    X.std <- X2/sdY; Y.std <- Y/sdY
-    lambda1.std <- max(lambda1/(sdY)^2, 1e-7)
-    lambda2.std <- max(lambda2/(sdY)^2, 1e-7)
-    s <- (lambda1.std + lambda2.std)/N; alpha <- lambda1.std/(N*s)
-    LL <- c(0, 10^seq(-2,2, .01) * s, max(1, 100*s))
-    gnet <- glmnet(X.std, Y.std, alpha=alpha, standardize=FALSE, intercept=FALSE, lambda=LL, thresh = thresh, ...)
-    ## the first item is the intercept
-    Thetavec2 <- as.numeric(coef(gnet, s=s)[-1, ])
+    ## to ensure success of fitting, let's use a small grid and choose
+    ## one that actually converges
+
+    enet.obj <- elastic.net(X2, Y, lambda1=lambda1, lambda2=lambda2, intercept=FALSE, normalize=FALSE, ...)
+    Thetavec2 <- as.numeric(slot(enet.obj, "coefficients"))
     ## Add pre-determined zeros back. Needs to be written in more efficient code
     if (length(zeroindx)>0){
-        Thetavec <- rep(0, p^2)
+        Thetavec <- rep(0, P^2)
         Thetavec[-zeroindx] <- Thetavec2
     } else {
         Thetavec <- Thetavec2
     }
     ## cut really small values
     Thetavec.cut <- replace(Thetavec, abs(Thetavec)<cutoff, 0)
-    Theta <- matrix(Thetavec.cut, p, p)
-    return(list(Theta=Theta, glmnet.obj=gnet, zeroindx=zeroindx, s=s, alpha=alpha, cutoff=cutoff))
+    Theta <- matrix(Thetavec.cut, P, P)
+    return(list(Theta=Theta, enet.obj=enet.obj, zeroindx=zeroindx, lambda1=lambda1, lambda2=lambda2, cutoff=cutoff, linobj=linobj))
 }
 
 ## The big wrapper function
-backfit <- function(Bhat, Astar, X0, Y, Ts, lambda1=.5, lambda2="auto", thresh=1e-11, cutoff=0.1, compensate=TRUE, gamma.approx=TRUE, coefs=c("integral", "sum"), level=5, eigen.prop.thresh=0.1^5, lambda2.min=0.1^5, prescreen="L1", prescreen.prop=.5,  ...){
+backfit <- function(Bhat, Astar, X0, Y, Ts, lambda1=1e-5, lambda2="auto", thresh=1e-11, cutoff=0.1, compensate=TRUE, gamma.approx=TRUE, coefs=c("integral", "sum"), level=30, eigen.prop.thresh=0.1^5, lambda2.min=0.1^5, prescreen="L1", prescreen.prop=.5,  ...){
     coefs <- match.arg(coefs)
     Binv <- solve(t(Bhat) %*% Bhat) %*% t(Bhat)
     ThetaHat <- Bhat %*% Astar %*% Binv
     ## linearization
     LIN <- linearize(Astar, Bhat, X0, Y, Ts, compensate=compensate, gamma.approx=gamma.approx, coefs=coefs, level=level, eigen.prop.thresh=eigen.prop.thresh, lambda2.min=lambda2.min)
-    ## glmnet
-    bfit <- lin2glmnet(LIN, ThetaHat, lambda1=lambda1, lambda2=lambda2, prescreen=prescreen, prescreen.prop=prescreen.prop, thresh=thresh, ...)
+    ## enet
+    bfit <- lin2enet(LIN, ThetaHat, lambda1=lambda1, lambda2=lambda2, prescreen=prescreen, prescreen.prop=prescreen.prop, thresh=thresh, ...)
     return(bfit)
 }
+
+## In case the user want to change the sparsity level (via lambda1 and cutoff)
+refit <- function(bfit, lambda1="orig", cutoff="orig"){
+    P <- nrow(bfit[["Theta"]])
+    enet.obj <- bfit[["enet.obj"]]
+    if (lambda1 == "orig") lambda1 <- bfit[["lambda1"]]
+    if (cutoff == "orig") cutoff <- bfit[["cutoff"]]
+    zeroindx <- bfit[["zeroindx"]]
+    Thetavec2 <- as.numeric(slot(enet.obj, "coefficients"))
+    ## Add pre-determined zeros back. Needs to be written in more efficient code
+    if (length(zeroindx)>0){
+        Thetavec <- rep(0, P^2)
+        Thetavec[-zeroindx] <- Thetavec2
+    } else {
+        Thetavec <- Thetavec2
+    }
+    ## cut really small values
+    Thetavec.cut <- replace(Thetavec, abs(Thetavec)<cutoff, 0)
+    Theta <- matrix(Thetavec.cut, P, P)
+    return(list(Theta=Theta, enet.obj=enet.obj, zeroindx=zeroindx, alpha=alpha, cutoff=cutoff, linobj=bfit[["linobj"]]))
+}
+

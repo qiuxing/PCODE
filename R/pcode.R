@@ -71,7 +71,7 @@ lowdim.est <- function(Ts, xhats, xhats.curves, weights=NULL, est.method=c("pda"
 }
 
 ## The main function
-PCODE <- function(y, Ts, K, lambda=.1^5, pca.method=c("fpca", "pca"), weight=c("varprop", "none"), prescreen.prop=.7, lambda1=.5, lambda2="auto", thresh=1e-11, cutoff=.05, est.method=c("pda", "two.stage", "pda0", "two.stage0"), est.pen=.1^4, stab.method=c("eigen-bound", "eigen-bound2", "random", "zero", "none"), refine.method=c("none", "pelos"), compensate=TRUE, gamma.approx=TRUE, center=FALSE, const=FALSE, verbose=FALSE, ...){
+PCODE <- function(y, Ts, K, lambda=.1^5, pca.method=c("fpca", "pca"), weight=c("varprop", "none"), prescreen.prop=.7, lambda1=1e-5, lambda2="auto", thresh=1e-11, cutoff=.05, est.method=c("pda", "two.stage", "pda0", "two.stage0"), est.pen=.1^4, stab.method=c("eigen-bound", "eigen-bound2", "random", "zero", "none"), refine.method=c("none", "pelos"), compensate=TRUE, gamma.approx=TRUE, center=FALSE, const=FALSE, verbose=FALSE, ...){
     ## The ... arguments are used by .backfit().
     pca.method <- match.arg(pca.method)
     weight <- match.arg(weight)
