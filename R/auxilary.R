@@ -1,3 +1,43 @@
+## some convenience functions 
+mplot <- function(mat, ncolor=100, col.min=NULL, col.max=NULL, ...) {
+  mat <- as.matrix(mat)
+  mmin <- min(mat, na.rm=TRUE); mmax <- max(mat, na.rm=TRUE)
+  if (is.null(col.min)) col.min <- mmin
+  if (is.null(col.max)) col.max <- mmax
+  ## 
+  if (col.min<=mmin & col.max<mmax) {
+    breaks <- c(seq(col.min, col.max, length.out=ncolor), mmax)
+  } else if (col.min>mmin & col.max<mmax) {
+    breaks <- c(mmin, seq(col.min, col.max, length.out=ncolor-1), mmax)
+  } else if (col.min>mmin & col.max>=mmax) {
+    breaks <- c(mmin, seq(col.min, col.max, length.out=ncolor))
+  } else { #col.min<=mmin & col.max>=mmax
+    breaks <- seq(col.min, col.max, length.out=ncolor+1)
+  }
+  image(t(mat[nrow(mat):1,]), col=grey(seq(1, 0, length.out=ncolor)),
+        breaks=breaks, xaxt="n", yaxt="n",  bty="n",
+        asp=nrow(mat)/ncol(mat),...)
+}
+## tr <- function(M) sum(diag(as.matrix(M)))
+tr <- function(A, B=NULL) {
+  if (is.null(B)) {
+    A <- as.matrix(A); dimA <- dim(A)
+    if (dimA[1] != dimA[2]) stop("tr() only works on a square matrix!")
+    return(sum(diag(A)))
+  } else {
+    A <- as.matrix(A); B <- as.matrix(B)
+    dimA <- dim(A); dimB <- dim(B)
+    if (dimA[2]!=dimB[1]) stop("tr(A,B) only works when AB can be defined!")
+    if (dimA[1]!=dimB[2]) stop("tr(A,B) only works when AB is a square matrix!")
+    ## use the following computational shortcut is much faster than
+    ## the naive method
+    return(sum(t(A)*B))
+  }
+}
+vec <- as.vector
+
+
+
 ## A Ridge-like matrix inverse for symmetric matrices
 ridge.inv <- function(SymMat, lambda.prop=.1^4){
     ee <- eigen(SymMat); LL <- ee[["values"]]; TT <- ee[["vectors"]]
@@ -122,7 +162,7 @@ graff.mean <- function(pcalist){
     ## orthonormal; we re-orthonormalize them just to be on the right
     ## track.
     Qxs <- lapply(Xs, function(X) qr.Q(qr(X)))
-    Qxs2 <- lapply(Qxs, function(Qx) {Qx%*%t(Qx)})
+    Qxs2 <- lapply(Qxs, tcrossprod)
     mutilde <- lapply(1:n, function(i) centers[[i]]-Qxs2[[i]] %*% centers[[i]])
     Phat <- Reduce("+", Qxs2)/n
     mean.centers <- Reduce("+", mutilde)/n
@@ -145,7 +185,7 @@ graff.mean <- function(pcalist){
 
     mean.xhats.curves <- fd(Tbeta %*% Lambda.negroot %*% Ehat, mybasis)
     meancur.proj.coefs <- coef(mean.xhats.curves) %*% inprod(mean.xhats.curves, meancurs)
-    mean.meancur <- mean(fd(meancurs.coefs - meancur.proj.coefs, mybasis))
+    mean.meancur <- fd(rowMeans(meancurs.coefs - meancur.proj.coefs), mybasis)
     mean.xhats <- eval.fd(Ts, mean.xhats.curves)
     mean.centers <- as.vector(eval.fd(Ts, mean.meancur))
   } else if  (method=="spca") {
